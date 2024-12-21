@@ -1,4 +1,9 @@
-# Reconstruction with Partial Tokens
+# Reconstruction with Partial Tokens Experiments Setup
+
+1. Dependency Preparation: `pip3 install -r requirements.txt`.
+2. Data Preparation: `bash convert_imagenet.sh`, replace `output_dir`.
+3. Training: `train.sh`: replace `config` by `titok_b64_matryoshka.yaml`.
+4. Customization: see `model.reconstruction_regularization` in `titok_b64_matryoshka.yaml`, global search `QY` for important modification.
 
 # 1D Visual Tokenization and Generation
 
