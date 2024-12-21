@@ -138,6 +138,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.use_regularization = True
             self.regularization_name = config.model.reconstruction_regularization.name
             self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
+        else:
+            self.use_regularization = False
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""

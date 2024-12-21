@@ -1,3 +1,5 @@
+# Reconstruction with Partial Tokens
+
 # 1D Visual Tokenization and Generation
 
 This repo hosts the code and models for the following projects:
