@@ -32,8 +32,8 @@ losses:
 
 dataset:
     params:
-        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..0252}.tar"
-        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0009}.tar"
+        train_shards_path_or_url: "/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar"
+        eval_shards_path_or_url: "/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar"
         num_workers_per_gpu: 12
     preprocessing:
         resize_shorter_edge: 256
