@@ -29,6 +29,7 @@ model:
     reconstruction_regularization: 
         name: matryoshka
         mask_ratio_method: hierarchical
+        max_mask_rate: 0.75
 
 losses:
     quantizer_weight: 1.0

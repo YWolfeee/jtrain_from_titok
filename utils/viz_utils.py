@@ -21,27 +21,29 @@ from einops import rearrange
 
 def make_viz_from_samples(
     original_images,
-    reconstructed_images
+    reconstructed_images_list
 ):
     """Generates visualization images from original images and reconstructed images.
 
     Args:
         original_images: A torch.Tensor, original images.
-        reconstructed_images: A torch.Tensor, reconstructed images.
+        reconstructed_images: List of torch.Tensor, reconstructed images with different mask ratio.
 
     Returns:
         A tuple containing two lists - images_for_saving and images_for_logging.
     """
-    reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
-    reconstructed_images = reconstructed_images * 255.0
-    reconstructed_images = reconstructed_images.cpu()
-    
     original_images = torch.clamp(original_images, 0.0, 1.0)
     original_images *= 255.0
     original_images = original_images.cpu()
 
-    diff_img = torch.abs(original_images - reconstructed_images)
-    to_stack = [original_images, reconstructed_images, diff_img]
+    to_stack = [original_images]
+    for reconstructed_images in reconstructed_images_list:
+        reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
+        reconstructed_images = reconstructed_images * 255.0
+        reconstructed_images = reconstructed_images.cpu()
+        diff_img = torch.abs(original_images - reconstructed_images)
+        to_stack.append(reconstructed_images)
+        to_stack.append(diff_img)
 
     images_for_logging = rearrange(
             torch.stack(to_stack),
