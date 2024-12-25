@@ -2,4 +2,5 @@ __pycache__/
 *.pyc
 maskgit-vqgan-imagenet-f16-256.bin
 titok_b64_stage1_run1
+stage1_dry_run
 wandb/

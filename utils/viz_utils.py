@@ -43,12 +43,21 @@ def make_viz_from_samples(
         reconstructed_images = reconstructed_images.cpu()
         diff_img = torch.abs(original_images - reconstructed_images)
         to_stack.append(reconstructed_images)
+
+    to_stack.append(original_images)
+    prev_images = original_images
+    for reconstructed_images in reconstructed_images_list:
+        reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
+        reconstructed_images = reconstructed_images * 255.0
+        reconstructed_images = reconstructed_images.cpu()
+        diff_img = torch.abs(reconstructed_images - prev_images)
+        prev_images = reconstructed_images
         to_stack.append(diff_img)
 
     images_for_logging = rearrange(
             torch.stack(to_stack),
             "(l1 l2) b c h w -> b c (l1 h) (l2 w)",
-            l1=1).byte()
+            l1=2).byte()
     images_for_saving = [F.to_pil_image(image) for image in images_for_logging]
 
     return images_for_saving, images_for_logging
