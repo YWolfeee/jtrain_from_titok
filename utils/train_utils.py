@@ -521,42 +521,47 @@ def train_one_epoch(config, logger, accelerator,
                     ema_model.store(model.parameters())
                     ema_model.copy_to(model.parameters())
                     # Eval for EMA.
-                    eval_scores = eval_reconstruction(
-                        model,
-                        eval_dataloader,
-                        accelerator,
-                        evaluator,
-                        pretrained_tokenizer=pretrained_tokenizer
-                    )
-                    logger.info(
-                        f"EMA EVALUATION "
-                        f"Step: {global_step + 1} "
-                    )
-                    logger.info(pprint.pformat(eval_scores))
-                    if accelerator.is_main_process:
-                        eval_log = {f'ema_eval/'+k: v for k, v in eval_scores.items()}
-                        accelerator.log(eval_log, step=global_step + 1)
+                    decode_mask_rate_list = [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
+                    for decode_mask_rate in decode_mask_rate_list:
+                        eval_scores = eval_reconstruction(
+                            model,
+                            eval_dataloader,
+                            accelerator,
+                            evaluator,
+                            pretrained_tokenizer=pretrained_tokenizer,
+                            decode_mask_rate=decode_mask_rate
+                        )
+                        logger.info(
+                            f"EMA EVALUATION with {(1 - decode_mask_rate) * 100}% tokens"
+                            f"Step: {global_step + 1} "
+                        )
+                        logger.info(pprint.pformat(eval_scores))
+                        if accelerator.is_main_process:
+                            eval_log = {f'ema_eval_{(1 - decode_mask_rate) * 100}%_tokens/'+k: v for k, v in eval_scores.items()}
+                            accelerator.log(eval_log, step=global_step + 1)
                     if config.training.get("use_ema", False):
                         # Switch back to the original model parameters for training.
                         ema_model.restore(model.parameters())
                 else:
                     # Eval for non-EMA.
-                    eval_scores = eval_reconstruction(
-                        model,
-                        eval_dataloader,
-                        accelerator,
-                        evaluator,
-                        pretrained_tokenizer=pretrained_tokenizer
-                    )
-
-                    logger.info(
-                        f"Non-EMA EVALUATION "
-                        f"Step: {global_step + 1} "
-                    )
-                    logger.info(pprint.pformat(eval_scores))
-                    if accelerator.is_main_process:
-                        eval_log = {f'eval/'+k: v for k, v in eval_scores.items()}
-                        accelerator.log(eval_log, step=global_step + 1)
+                    decode_mask_rate_list = [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
+                    for decode_mask_rate in decode_mask_rate_list:
+                        eval_scores = eval_reconstruction(
+                            model,
+                            eval_dataloader,
+                            accelerator,
+                            evaluator,
+                            pretrained_tokenizer=pretrained_tokenizer,
+                            decode_mask_rate=decode_mask_rate
+                        )
+                        logger.info(
+                            f"EMA EVALUATION with {(1 - decode_mask_rate) * 100}% tokens"
+                            f"Step: {global_step + 1} "
+                        )
+                        logger.info(pprint.pformat(eval_scores))
+                        if accelerator.is_main_process:
+                            eval_log = {f'eval_{(1 - decode_mask_rate) * 100}%_tokens/'+k: v for k, v in eval_scores.items()}
+                            accelerator.log(eval_log, step=global_step + 1)
 
                 accelerator.wait_for_everyone()
 
@@ -755,7 +760,8 @@ def eval_reconstruction(
     eval_loader,
     accelerator,
     evaluator,
-    pretrained_tokenizer=None
+    pretrained_tokenizer=None,
+    decode_mask_rate=0.0
 ):
     model.eval()
     evaluator.reset_metrics()
@@ -766,7 +772,7 @@ def eval_reconstruction(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
         original_images = torch.clone(images)
-        reconstructed_images, model_dict = local_model(images)
+        reconstructed_images, model_dict = local_model(images, decode_mask_rate=decode_mask_rate)
         if pretrained_tokenizer is not None:
             reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
         reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
