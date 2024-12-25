@@ -247,7 +247,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         z_quantized = z_quantized * mask.to(z_quantized.dtype, z_quantized.device)
         return z_quantized
     
-    def forward(self, x):
+    def forward(self, x, decode_mask_rate=0.0):
         z_quantized, result_dict = self.encode(x)
-        decoded, decode_mask_rate = self.decode(z_quantized)
+        decoded, decode_mask_rate = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         return decoded, result_dict
