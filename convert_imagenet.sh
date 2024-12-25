@@ -1,1 +1,0 @@
-python data/convert_imagenet_to_wds.py --output_dir /mnt/rdata8/imagenet_wds

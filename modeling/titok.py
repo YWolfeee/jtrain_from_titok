@@ -138,6 +138,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.use_regularization = True
             self.regularization_name = config.model.reconstruction_regularization.name
             self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
+            self.max_mask_rate = config.model.reconstruction_regularization.max_mask_rate
         else:
             self.use_regularization = False
         
@@ -189,14 +190,34 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
 
         return z_quantized, result_dict
     
-    def decode(self, z_quantized):
+    def decode(self, z_quantized, decode_mask_rate=0.0):
+        # QY: Reconstruct with partial tokens
+        if self.use_regularization:
+            if self.training:
+                if self.mask_ratio_method == "uniform":
+                    mask_rate = torch.empty(1).uniform_(0, self.max_mask_rate).item()
+                elif self.mask_ratio_method == "hierarchical":
+                    values = torch.tensor([self.max_mask_rate * i / 8 for i in range(9)])
+                    mask_rate = values[torch.randint(0, len(values), (1,))].item()
+                else:
+                    raise NotImplementedError(f"Unsupported mask ratio method {self.mask_ratio_method}.")
+            else:
+                mask_rate = decode_mask_rate
+            
+            if self.regularization_name == "matryoshka":
+                z_quantized = self.matryoshka_masking(z_quantized, mask_rate=mask_rate)
+            elif self.regularization_name == "random":
+                z_quantized = self.random_masking(z_quantized, mask_rate=mask_rate)
+            else:
+                raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
+        
         decoded = self.decoder(z_quantized)
         if self.finetune_decoder:
             quantized_states = torch.einsum(
                 'nchw,cd->ndhw', decoded.softmax(1),
                 self.pixel_quantize.embedding.weight)
             decoded = self.pixel_decoder(quantized_states)
-        return decoded
+        return decoded, decode_mask_rate
     
     def decode_tokens(self, tokens):
         if self.quantize_mode == "vq":
@@ -207,11 +228,15 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             z_quantized = rearrange(z_quantized, 'b h w c -> b c h w').contiguous()
         elif self.quantize_mode == "vae":
             z_quantized = tokens
-        decoded = self.decode(z_quantized)
+        decoded, _ = self.decode(z_quantized)
         return decoded
     
     def matryoshka_masking(self, z_quantized, mask_rate=0.5):
-        keep_tokens = int(z_quantized.shape[-1] * (1 - mask_rate)) - 1
+        keep_tokens = int(z_quantized.shape[-1] * (1 - mask_rate))
+        
+        if keep_tokens == z_quantized.shape[-1]:
+            return z_quantized
+        
         mask = torch.ones_like(z_quantized)
         mask[:, :, keep_tokens:] = 0
         z_quantized = z_quantized * mask
@@ -224,23 +249,5 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
     
     def forward(self, x):
         z_quantized, result_dict = self.encode(x)
-        
-        # QY: Reconstruct with partial tokens
-        if self.use_regularization:
-            if self.mask_ratio_method == "uniform":
-                mask_rate = torch.empty(1).uniform_(0.25, 1).item()
-            elif self.mask_ratio_method == "hierarchical":
-                values = torch.tensor([0.25, 0.5, 0.75, 1])
-                mask_rate = values[torch.randint(0, len(values), (1,))].item()
-            else:
-                raise NotImplementedError(f"Unsupported mask ratio method {self.mask_ratio_method}.")
-            
-            if self.regularization_name == "matryoshka":
-                z_quantized = self.matryoshka_masking(z_quantized, mask_rate=mask_rate)
-            elif self.regularization_name == "random":
-                z_quantized = self.random_masking(z_quantized, mask_rate=mask_rate)
-            else:
-                raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
-        
-        decoded = self.decode(z_quantized)
+        decoded, decode_mask_rate = self.decode(z_quantized)
         return decoded, result_dict

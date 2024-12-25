@@ -794,12 +794,17 @@ def reconstruct_images(model, original_images, fnames, accelerator,
 
     with torch.autocast("cuda", dtype=dtype, enabled=accelerator.mixed_precision != "no"):
         enc_tokens, encoder_dict = accelerator.unwrap_model(model).encode(original_images)
-    reconstructed_images = accelerator.unwrap_model(model).decode(enc_tokens)
-    if pretrained_tokenizer is not None:
-        reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+    reconstructed_images_list = []
+    # QY: Eval with different decode_mask_rate
+    mask_rate_list = [i / 16 for i in range(17)]
+    for decode_mask_rate in mask_rate_list:
+        reconstructed_images = accelerator.unwrap_model(model).decode(enc_tokens, decode_mask_rate=decode_mask_rate)
+        if pretrained_tokenizer is not None:
+            reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+        reconstructed_images_list.append(reconstructed_images)
     images_for_saving, images_for_logging = make_viz_from_samples(
         original_images,
-        reconstructed_images
+        reconstructed_images_list
     )
     # Log images.
     if config.training.enable_wandb:
