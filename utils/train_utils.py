@@ -521,7 +521,7 @@ def train_one_epoch(config, logger, accelerator,
                     ema_model.store(model.parameters())
                     ema_model.copy_to(model.parameters())
                     # Eval for EMA.
-                    decode_mask_rate_list = [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
+                    decode_mask_rate_list = [0.0, 0.25, 0.5, 0.75]
                     for decode_mask_rate in decode_mask_rate_list:
                         eval_scores = eval_reconstruction(
                             model,

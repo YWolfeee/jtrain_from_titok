@@ -174,7 +174,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 self.encoder.eval()
                 self.quantize.eval()
                 z = self.encoder(pixel_values=x, latent_tokens=self.latent_tokens)
-                print(z.shape)
                 z_quantized, result_dict = self.quantize(z)
                 result_dict["quantizer_loss"] *= 0
                 result_dict["commitment_loss"] *= 0
@@ -217,9 +216,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 'nchw,cd->ndhw', decoded.softmax(1),
                 self.pixel_quantize.embedding.weight)
             decoded = self.pixel_decoder(quantized_states)
-        return decoded, decode_mask_rate
+        return decoded
     
-    def decode_tokens(self, tokens):
+    def decode_tokens(self, tokens, decode_mask_rate=0.0):
         if self.quantize_mode == "vq":
             tokens = tokens.squeeze(1)
             batch, seq_len = tokens.shape # B x N
@@ -228,26 +227,25 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             z_quantized = rearrange(z_quantized, 'b h w c -> b c h w').contiguous()
         elif self.quantize_mode == "vae":
             z_quantized = tokens
-        decoded, _ = self.decode(z_quantized)
+        decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         return decoded
     
     def matryoshka_masking(self, z_quantized, mask_rate=0.5):
         keep_tokens = int(z_quantized.shape[-1] * (1 - mask_rate))
-        
         if keep_tokens == z_quantized.shape[-1]:
             return z_quantized
         
         mask = torch.ones_like(z_quantized)
-        mask[:, :, keep_tokens:] = 0
+        mask[:, :, :, keep_tokens:] = 0
         z_quantized = z_quantized * mask
         return z_quantized
     
     def random_masking(self, z_quantized, mask_rate=0.5):
-        mask = torch.rand_like(z_quantized) > mask_rate
+        mask = torch.rand_like(z_quantized[0:1, 0:1, 0:1, :]) > mask_rate
         z_quantized = z_quantized * mask.to(z_quantized.dtype, z_quantized.device)
         return z_quantized
     
     def forward(self, x, decode_mask_rate=0.0):
         z_quantized, result_dict = self.encode(x)
-        decoded, decode_mask_rate = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
+        decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         return decoded, result_dict
