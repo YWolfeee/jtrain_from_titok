@@ -23,13 +23,13 @@ model:
         vit_dec_model_size: "base"
         vit_enc_patch_size: 16
         vit_dec_patch_size: 16
-        num_latent_tokens: 64
+        num_latent_tokens: 128
         finetune_decoder: False
         pretrained_tokenizer_weight: "maskgit-vqgan-imagenet-f16-256.bin"
     reconstruction_regularization: 
         name: matryoshka
         mask_ratio_method: uniform
-        max_mask_rate: 0.99 # Ensure at least 1 token is used
+        max_mask_rate: 0.999 # Ensure at least 1 token is used
         annealing:
             time_start: 0.25 # 50 epochs over 200 epochs
             time_end: 0.75 # 150 epochs over 200 epochs

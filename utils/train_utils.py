@@ -362,6 +362,11 @@ def train_one_epoch(config, logger, accelerator,
         else:
             proxy_codes = None
 
+        # QY: Update max mask rate based on annealing schedule if configured
+        if config.model.reconstruction_regularization.get("annealing"):
+            max_mask_rate = get_titok_max_mask_rate(config, global_step)
+            accelerator.unwrap_model(model).set_max_mask_rate(max_mask_rate)
+
         with accelerator.accumulate([model, loss_module]):
             reconstructed_images, extra_results_dict = model(images)
             if proxy_codes is None:
@@ -576,6 +581,17 @@ def train_one_epoch(config, logger, accelerator,
 
     return global_step
 
+def get_titok_max_mask_rate(config, global_step):
+    """QY: Get the max mask rate for TiTok model."""
+    annealing = config.model.reconstruction_regularization.annealing
+    time_start = annealing.time_start * config.training.max_train_steps
+    time_end = annealing.time_end * config.training.max_train_steps
+    if global_step < time_start:
+        return 0.0
+    elif global_step > time_end:
+        return config.model.reconstruction_regularization.max_mask_rate
+    else:
+        return (global_step - time_start) / (time_end - time_start) * config.model.reconstruction_regularization.max_mask_rate
 
 def get_rar_random_ratio(config, cur_step):
     randomness_anneal_start = config.model.generator.randomness_anneal_start

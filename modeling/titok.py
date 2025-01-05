@@ -139,6 +139,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.regularization_name = config.model.reconstruction_regularization.name
             self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
             self.max_mask_rate = config.model.reconstruction_regularization.max_mask_rate
+            # self.mask_token_id = config.model.vq_model.codebook_size
         else:
             self.use_regularization = False
         
@@ -167,6 +168,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def set_max_mask_rate(self, max_mask_rate):
+        self.max_mask_rate = max_mask_rate
 
     def encode(self, x, drop_p=0.0):
         if self.finetune_decoder:
@@ -234,6 +238,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         keep_tokens = int(z_quantized.shape[-1] * (1 - mask_rate))
         if keep_tokens == z_quantized.shape[-1]:
             return z_quantized
+        if keep_tokens == 0:
+            keep_tokens = 1 # Ensure at least 1 token is used
         
         mask = torch.ones_like(z_quantized)
         mask[:, :, :, keep_tokens:] = 0
