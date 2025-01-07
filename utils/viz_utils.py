@@ -82,28 +82,56 @@ def make_viz_from_samples(
     original_images *= 255.0
     original_images = original_images.cpu()
 
-    # Create annotations
-    annotations = ["GT"] + [f"{(1 - i/16)*100:.1f}%" for i in range(17)]
-    font_size = 12
-    annotation_height = 20
+    # Create annotations for both rows
+    annotations_row1 = ["GT"] + [f"{(1 - i/16)*100:.1f}%" for i in range(len(reconstructed_images_list))]
+    annotations_row2 = ["GT"] + ["Diff"] * len(reconstructed_images_list)
+    font_size = 24  # Increased from 12 to 24
+    annotation_height = 40  # Increased from 20 to 40 to accommodate larger font
     
     # Create white background for annotations
     batch_size = original_images.shape[0]
     img_height = original_images.shape[2]
     img_width = original_images.shape[3]
+    num_images = len(reconstructed_images_list) + 1
     
     # Create empty tensor with space for annotations
-    annotated_images = torch.ones(batch_size, 3, img_height + annotation_height, img_width * 17) * 255.0
+    # Shape: [batch_size, 3, (img_height + annotation_height)*2, img_width * num_images]
+    annotated_images = torch.ones(
+        (batch_size, 3, (img_height + annotation_height)*2, img_width * num_images), 
+        dtype=original_images.dtype,
+        device=original_images.device
+    ) * 255.0
 
+    # First row: original and reconstructed images
     # Add original image
-    annotated_images[:, :, annotation_height:, :img_width] = original_images
+    annotated_images[:, :, annotation_height:img_height+annotation_height, :img_width] = original_images
 
     # Add reconstructed images
+    prev_images = original_images
     for i, reconstructed_images in enumerate(reconstructed_images_list):
         reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0) * 255.0
         reconstructed_images = reconstructed_images.cpu()
         start_x = (i + 1) * img_width
-        annotated_images[:, :, annotation_height:, start_x:start_x + img_width] = reconstructed_images
+        end_x = start_x + img_width
+        annotated_images[:, :, annotation_height:img_height+annotation_height, start_x:end_x] = reconstructed_images
+
+    # Second row: original and diff images
+    row2_start = img_height + 2*annotation_height
+    row2_end = row2_start + img_height
+    
+    # Add original image to second row
+    annotated_images[:, :, row2_start:row2_end, :img_width] = original_images
+
+    # Add diff images
+    prev_images = original_images
+    for i, reconstructed_images in enumerate(reconstructed_images_list):
+        reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0) * 255.0
+        reconstructed_images = reconstructed_images.cpu()
+        diff_img = torch.abs(reconstructed_images - prev_images)
+        prev_images = reconstructed_images
+        start_x = (i + 1) * img_width
+        end_x = start_x + img_width
+        annotated_images[:, :, row2_start:row2_end, start_x:end_x] = diff_img
 
     # Convert to PIL to add text annotations
     images_for_saving = []
@@ -115,9 +143,17 @@ def make_viz_from_samples(
         except:
             font = ImageFont.load_default()
             
-        for i, text in enumerate(annotations):
+        # Add annotations for first row
+        for i, text in enumerate(annotations_row1):
             x = i * img_width + img_width//2 - len(text)*font_size//4
-            draw.text((x, 2), text, fill="black", font=font)
+            draw.text((x, 4), text, fill="black", font=font)  # Adjusted y position from 2 to 4
+            
+        # Add annotations for second row
+        for i, text in enumerate(annotations_row2):
+            x = i * img_width + img_width//2 - len(text)*font_size//4
+            y = img_height + annotation_height + 4  # Adjusted from 2 to 4
+            draw.text((x, y), text, fill="black", font=font)
+            
         images_for_saving.append(img_pil)
 
     # Convert back to tensor for logging
