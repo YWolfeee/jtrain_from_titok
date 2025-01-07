@@ -1,0 +1,201 @@
+The following values were not passed to `accelerate launch` and had defaults used instead:
+		More than one GPU was found, enabling multi-GPU training.
+		If this was unintended please pass in `--num_processes=1`.
+	`--mixed_precision` was set to a value of `'no'`
+	`--dynamo_backend` was set to a value of `'no'`
+To avoid this warning pass in values for each of the problematic parameters or run `accelerate config`.
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:138: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:138: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:138: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:138: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:138: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:138: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:138: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:138: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+wandb: Using wandb-core as the SDK backend.  Please refer to https://wandb.me/wandb-core for more information.
+[rank6]:[W105 15:57:21.316878346 ProcessGroupNCCL.cpp:4115] [PG ID 0 PG GUID 0 Rank 6]  using GPU 6 to perform barrier as devices used by this process are currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect.Specify device_ids in barrier() to force use of a particular device,or call init_process_group() with a device_id.
+[rank3]:[W105 15:57:21.317701380 ProcessGroupNCCL.cpp:4115] [PG ID 0 PG GUID 0 Rank 3]  using GPU 3 to perform barrier as devices used by this process are currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect.Specify device_ids in barrier() to force use of a particular device,or call init_process_group() with a device_id.
+[rank4]:[W105 15:57:21.321794941 ProcessGroupNCCL.cpp:4115] [PG ID 0 PG GUID 0 Rank 4]  using GPU 4 to perform barrier as devices used by this process are currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect.Specify device_ids in barrier() to force use of a particular device,or call init_process_group() with a device_id.
+[rank5]:[W105 15:57:21.351830644 ProcessGroupNCCL.cpp:4115] [PG ID 0 PG GUID 0 Rank 5]  using GPU 5 to perform barrier as devices used by this process are currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect.Specify device_ids in barrier() to force use of a particular device,or call init_process_group() with a device_id.
+[rank1]:[W105 15:57:21.371654124 ProcessGroupNCCL.cpp:4115] [PG ID 0 PG GUID 0 Rank 1]  using GPU 1 to perform barrier as devices used by this process are currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect.Specify device_ids in barrier() to force use of a particular device,or call init_process_group() with a device_id.
+[rank7]:[W105 15:57:21.446332048 ProcessGroupNCCL.cpp:4115] [PG ID 0 PG GUID 0 Rank 7]  using GPU 7 to perform barrier as devices used by this process are currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect.Specify device_ids in barrier() to force use of a particular device,or call init_process_group() with a device_id.
+[rank2]:[W105 15:57:21.467361080 ProcessGroupNCCL.cpp:4115] [PG ID 0 PG GUID 0 Rank 2]  using GPU 2 to perform barrier as devices used by this process are currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect.Specify device_ids in barrier() to force use of a particular device,or call init_process_group() with a device_id.
+wandb: Currently logged in as: hodavid538 (guided-diffusion). Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.19.0
+wandb: Run data is saved locally in /home/qiyuan/jtrain_from_titok/wandb/run-20250105_155722-d94yz0km
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run misunderstood-donkey-1
+wandb: ⭐️ View project at https://wandb.ai/guided-diffusion/titok_s128_matryoshka_annealing_stage1_run1
+wandb: 🚀 View run at https://wandb.ai/guided-diffusion/titok_s128_matryoshka_annealing_stage1_run1/runs/d94yz0km
+[rank0]:[W105 15:57:24.953438259 ProcessGroupNCCL.cpp:4115] [PG ID 0 PG GUID 0 Rank 0]  using GPU 0 to perform barrier as devices used by this process are currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect.Specify device_ids in barrier() to force use of a particular device,or call init_process_group() with a device_id.
+/home/qiyuan/jtrain_from_titok/modeling/titok.py:52: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu")), strict=True)
+/home/qiyuan/jtrain_from_titok/modeling/titok.py:52: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu")), strict=True)
+/home/qiyuan/jtrain_from_titok/modeling/titok.py:52: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu")), strict=True)
+/home/qiyuan/jtrain_from_titok/modeling/titok.py:52: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu")), strict=True)
+/home/qiyuan/jtrain_from_titok/modeling/titok.py:52: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu")), strict=True)
+/home/qiyuan/jtrain_from_titok/modeling/titok.py:52: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu")), strict=True)
+/home/qiyuan/jtrain_from_titok/modeling/titok.py:52: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu")), strict=True)
+/home/qiyuan/jtrain_from_titok/modeling/titok.py:52: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(pretrained_weight, map_location=torch.device("cpu")), strict=True)
+Traceback (most recent call last):
+  File "/home/qiyuan/jtrain_from_titok/scripts/train_titok.py", line 174, in <module>
+    main()
+  File "/home/qiyuan/jtrain_from_titok/scripts/train_titok.py", line 146, in main
+    global_step = train_one_epoch(config, logger, accelerator,
+  File "/home/qiyuan/jtrain_from_titok/utils/train_utils.py", line 505, in train_one_epoch
+    reconstruct_images(
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/qiyuan/jtrain_from_titok/utils/train_utils.py", line 827, in reconstruct_images
+    images_for_saving, images_for_logging = make_viz_from_samples(
+  File "/home/qiyuan/jtrain_from_titok/utils/viz_utils.py", line 106, in make_viz_from_samples
+    annotated_images[:, :, annotation_height:, start_x:start_x + img_width] = reconstructed_images
+RuntimeError: The expanded size of the tensor (0) must match the existing size (256) at non-singleton dimension 3.  Target sizes: [2, 3, 256, 0].  Tensor sizes: [2, 3, 256, 256]
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/qiyuan/jtrain_from_titok/scripts/train_titok.py", line 174, in <module>
+[rank0]:     main()
+[rank0]:   File "/home/qiyuan/jtrain_from_titok/scripts/train_titok.py", line 146, in main
+[rank0]:     global_step = train_one_epoch(config, logger, accelerator,
+[rank0]:   File "/home/qiyuan/jtrain_from_titok/utils/train_utils.py", line 505, in train_one_epoch
+[rank0]:     reconstruct_images(
+[rank0]:   File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/home/qiyuan/jtrain_from_titok/utils/train_utils.py", line 827, in reconstruct_images
+[rank0]:     images_for_saving, images_for_logging = make_viz_from_samples(
+[rank0]:   File "/home/qiyuan/jtrain_from_titok/utils/viz_utils.py", line 106, in make_viz_from_samples
+[rank0]:     annotated_images[:, :, annotation_height:, start_x:start_x + img_width] = reconstructed_images
+[rank0]: RuntimeError: The expanded size of the tensor (0) must match the existing size (256) at non-singleton dimension 3.  Target sizes: [2, 3, 256, 0].  Tensor sizes: [2, 3, 256, 256]
+W0105 16:50:59.311000 1396776 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1396837 closing signal SIGTERM
+W0105 16:50:59.316000 1396776 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1396838 closing signal SIGTERM
+W0105 16:50:59.318000 1396776 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1396839 closing signal SIGTERM
+W0105 16:50:59.321000 1396776 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1396840 closing signal SIGTERM
+W0105 16:50:59.324000 1396776 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1396841 closing signal SIGTERM
+W0105 16:50:59.326000 1396776 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1396842 closing signal SIGTERM
+W0105 16:50:59.327000 1396776 site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1396843 closing signal SIGTERM
+E0105 16:50:59.372000 1396776 site-packages/torch/distributed/elastic/multiprocessing/api.py:869] failed (exitcode: 1) local_rank: 0 (pid: 1396836) of binary: /home/qiyuan/.conda/envs/titok/bin/python
+Traceback (most recent call last):
+  File "/home/qiyuan/.conda/envs/titok/bin/accelerate", line 8, in <module>
+    sys.exit(main())
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/accelerate/commands/accelerate_cli.py", line 48, in main
+    args.func(args)
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/accelerate/commands/launch.py", line 1159, in launch_command
+    multi_gpu_launcher(args)
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/accelerate/commands/launch.py", line 793, in multi_gpu_launcher
+    distrib_run.run(args)
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/torch/distributed/run.py", line 910, in run
+    elastic_launch(
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 138, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 269, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+scripts/train_titok.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2025-01-05_16:50:59
+  host      : cvml11.maas
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 1396836)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
