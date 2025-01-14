@@ -581,17 +581,21 @@ def train_one_epoch(config, logger, accelerator,
 
     return global_step
 
-def get_titok_max_mask_rate(config, global_step, increasing=False):
+def get_titok_max_mask_rate(config, global_step):
     """QY: Get the max mask rate for TiTok model."""
     annealing = config.model.reconstruction_regularization.annealing
+    is_increasing = annealing.is_increasing
     time_start = annealing.time_start * config.training.max_train_steps
     time_end = annealing.time_end * config.training.max_train_steps
+    alpha = (global_step - time_start) / (time_end - time_start)
+    end_mask_rate = config.model.reconstruction_regularization.max_mask_rate if is_increasing else 0.0
+    start_mask_rate = 0.0 if is_increasing else config.model.reconstruction_regularization.max_mask_rate
     if global_step < time_start:
-        return 0.0 if increasing else config.model.reconstruction_regularization.max_mask_rate
+        return start_mask_rate
     elif global_step > time_end:
-        return config.model.reconstruction_regularization.max_mask_rate if increasing else 0.0
+        return end_mask_rate
     else:
-        return (global_step - time_start) / (time_end - time_start) * config.model.reconstruction_regularization.max_mask_rate
+        return alpha * end_mask_rate + (1 - alpha) * start_mask_rate
 
 def get_rar_random_ratio(config, cur_step):
     randomness_anneal_start = config.model.generator.randomness_anneal_start

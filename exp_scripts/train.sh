@@ -9,7 +9,7 @@ eval "$(conda shell.bash hook)"
 conda activate titok
 
 export PYTHONPATH=$(pwd)
-accelerate launch \
+WANDB_MODE=offline accelerate launch \
     --num_machines=1 --num_processes=8 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/titok_s128_matryoshka_annealing.yaml \
