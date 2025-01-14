@@ -19,8 +19,8 @@ model:
         use_l2_norm: True
         commitment_cost: 0.25
         # vit arch
-        vit_enc_model_size: "base"
-        vit_dec_model_size: "base"
+        vit_enc_model_size: "small"
+        vit_dec_model_size: "small"
         vit_enc_patch_size: 16
         vit_dec_patch_size: 16
         num_latent_tokens: 128
@@ -33,6 +33,7 @@ model:
         annealing:
             time_start: 0.25 # 50 epochs over 200 epochs
             time_end: 0.75 # 150 epochs over 200 epochs
+            is_increasing: False
 
 losses:
     quantizer_weight: 1.0
