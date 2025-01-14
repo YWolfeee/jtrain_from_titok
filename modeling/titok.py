@@ -168,6 +168,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def set_max_mask_rate(self, max_mask_rate):
+        self.max_mask_rate = max_mask_rate
+
     def encode(self, x, drop_p=0.0):
         if self.finetune_decoder:
             with torch.no_grad():
@@ -234,6 +237,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         keep_tokens = int(z_quantized.shape[-1] * (1 - mask_rate))
         if keep_tokens == z_quantized.shape[-1]:
             return z_quantized
+        if keep_tokens == 0:
+            keep_tokens = 1 # Ensure at least 1 token is used
         
         mask = torch.ones_like(z_quantized)
         mask[:, :, :, keep_tokens:] = 0

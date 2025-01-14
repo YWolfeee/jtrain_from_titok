@@ -222,16 +222,19 @@ class TiTokEncoder(nn.Module):
                 "small": 512,
                 "base": 768,
                 "large": 1024,
+                "huge": 1280,
             }[self.model_size]
         self.num_layers = {
                 "small": 8,
                 "base": 12,
                 "large": 24,
+                "huge": 32,
             }[self.model_size]
         self.num_heads = {
                 "small": 8,
                 "base": 12,
                 "large": 16,
+                "huge": 24,
             }[self.model_size]
         
         self.patch_embed = nn.Conv2d(

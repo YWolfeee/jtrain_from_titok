@@ -23,24 +23,25 @@ model:
         vit_dec_model_size: "base"
         vit_enc_patch_size: 16
         vit_dec_patch_size: 16
-        num_latent_tokens: 64
+        num_latent_tokens: 256
         finetune_decoder: False
         pretrained_tokenizer_weight: "maskgit-vqgan-imagenet-f16-256.bin"
     reconstruction_regularization: 
         name: matryoshka
         mask_ratio_method: uniform
-        max_mask_rate: 0.99 # Ensure at least 1 token is used
+        max_mask_rate: 0.999 # Ensure at least 1 token is used
         annealing:
             time_start: 0.25 # 50 epochs over 200 epochs
             time_end: 0.75 # 150 epochs over 200 epochs
+            is_increasing: False
 
 losses:
     quantizer_weight: 1.0
 
 dataset:
     params:
-        train_shards_path_or_url: "datasets/imagenet-train-{000000..000252}.tar"
-        eval_shards_path_or_url: "datasets/imagenet-val-{000000..000009}.tar"
+        train_shards_path_or_url: "/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar"
+        eval_shards_path_or_url: "/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar"
         num_workers_per_gpu: 12
     preprocessing:
         resize_shorter_edge: 256
