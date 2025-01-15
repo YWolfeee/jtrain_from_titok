@@ -1,10 +1,13 @@
+config_name='titok_s128_4096_12'
+ngpus=8
+
 accelerate launch \
---num_machines=1 --num_processes=4 --machine_rank=0 \
+--num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
 --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
-scripts/train_titok.py config=configs/training/stage1/titok_s128_4096_12.yaml \
-experiment.project='titok_s128_4096_12_stage1' \
-experiment.name='titok_s128_4096_12_stage1_run1' \
-experiment.output_dir='titok_s128_4096_12_stage1_run1' \
+scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
+experiment.project="${config_name}_stage1" \
+experiment.name="${config_name}_stage1_run1" \
+experiment.output_dir="${config_name}_stage1_run1" \
 reconstruction_regularization.name='matryoshka' \
 reconstruction_regularization.mask_ratio_method='uniform' \
 reconstruction_regularization.max_mask_rate=0.95 \
