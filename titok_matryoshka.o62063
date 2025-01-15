@@ -1,4 +1,4 @@
-Thu Jan 16 00:37:38 2025       
+Thu Jan 16 01:51:24 2025       
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 560.28.03              Driver Version: 560.28.03      CUDA Version: 12.6     |
 |-----------------------------------------+------------------------+----------------------+
@@ -7,7 +7,7 @@ Thu Jan 16 00:37:38 2025
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
 |   0  NVIDIA A40                     Off |   00000000:3C:00.0 Off |                    0 |
-|  0%   30C    P8             22W /  300W |       1MiB /  46068MiB |      0%      Default |
+|  0%   31C    P8             22W /  300W |       1MiB /  46068MiB |      0%      Default |
 |                                         |                        |                  N/A |
 +-----------------------------------------+------------------------+----------------------+
                                                                                          
@@ -19,8 +19,8 @@ Thu Jan 16 00:37:38 2025
 |  No running processes found                                                             |
 +-----------------------------------------------------------------------------------------+
 attention mode is flash
-[01/16 00:37:57 TiTok]: Saving config to dry_run_stage1_run1/config.yaml
-[01/16 00:37:57 TiTok]: Config:
+[01/16 01:51:43 TiTok]: Saving config to dry_run_stage1_run1/config.yaml
+[01/16 01:51:43 TiTok]: Config:
 experiment:
   project: dry_run_stage1
   name: dry_run_stage1_run1
@@ -95,7 +95,7 @@ training:
   max_grad_norm: 1.0
 config: configs/training/stage1/dry_run.yaml
 
-[01/16 00:37:58 TiTok]: Creating model and loss module.
+[01/16 01:51:44 TiTok]: Creating model and loss module.
 ========================================================================================================================================================================================================
 Layer (type:depth-idx)                             Input Shape               Output Shape              Param #                   Param %                   Kernel Shape              Mult-Adds
 ========================================================================================================================================================================================================
@@ -513,7 +513,7 @@ Forward/backward pass size (MB): 2148.25
 Params size (MB): 1632.65
 Estimated Total Size (MB): 3781.69
 ========================================================================================================================================================================================================
-[01/16 00:38:06 TiTok]: ========================================================================================================================================================================================================
+[01/16 01:51:52 TiTok]: ========================================================================================================================================================================================================
 Layer (type:depth-idx)                             Input Shape               Output Shape              Param #                   Param %                   Kernel Shape              Mult-Adds
 ========================================================================================================================================================================================================
 TiTok                                              [1, 3, 256, 256]          [1, 1024, 16, 16]         524,288                     0.09%                   --                        --
@@ -930,9 +930,9 @@ Forward/backward pass size (MB): 2148.25
 Params size (MB): 1632.65
 Estimated Total Size (MB): 3781.69
 ========================================================================================================================================================================================================
-[01/16 00:38:06 TiTok]: Creating optimizers.
-[01/16 00:38:06 TiTok]: Creating lr_schedulers.
-[01/16 00:38:06 TiTok]: Creating dataloaders.
+[01/16 01:51:52 TiTok]: Creating optimizers.
+[01/16 01:51:52 TiTok]: Creating lr_schedulers.
+[01/16 01:51:52 TiTok]: Creating dataloaders.
 self.train_transform: Compose(
     Resize(size=256, interpolation=bicubic, max_size=None, antialias=True)
     RandomCrop(size=(256, 256), padding=None)
@@ -946,17 +946,13 @@ self.eval_transform: Compose(
     ToTensor()
     Normalize(mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0])
 )
-[01/16 00:38:06 TiTok]: Creating evaluator.
-[01/16 00:38:06 TiTok]: Preparing model, optimizer and dataloaders
-[01/16 00:38:07 TiTok]: ***** Running training *****
-[01/16 00:38:07 TiTok]:   Num training steps = 250000
-[01/16 00:38:07 TiTok]:   Gradient Accumulation steps = 1
-[01/16 00:38:07 TiTok]:   Instantaneous batch size per gpu = 128
-[01/16 00:38:07 TiTok]:   Total train batch size (w. parallel, distributed & accumulation) = 128
-[01/16 00:38:07 TiTok]: All globbed checkpoints are: []
-[01/16 00:38:07 TiTok]: Training from scratch.
+[01/16 01:51:52 TiTok]: Creating evaluator.
+[01/16 01:51:52 TiTok]: Preparing model, optimizer and dataloaders
+[01/16 01:51:52 TiTok]: ***** Running training *****
+[01/16 01:51:52 TiTok]:   Num training steps = 250000
+[01/16 01:51:52 TiTok]:   Gradient Accumulation steps = 1
+[01/16 01:51:52 TiTok]:   Instantaneous batch size per gpu = 128
+[01/16 01:51:52 TiTok]:   Total train batch size (w. parallel, distributed & accumulation) = 128
+[01/16 01:51:52 TiTok]: All globbed checkpoints are: []
+[01/16 01:51:52 TiTok]: Training from scratch.
 Epoch 0/24 started.
-[1;34mwandb[0m:
-[1;34mwandb[0m: You can sync this run to the cloud by running:
-[1;34mwandb[0m: [1mwandb sync /home/qiyuan/jtrain_from_titok/wandb/offline-run-20250116_003756-izluu3nr[0m
-[1;34mwandb[0m: Find logs at: [1;35mwandb/offline-run-20250116_003756-izluu3nr/logs[0m
