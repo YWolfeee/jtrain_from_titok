@@ -134,7 +134,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 "z_channels": 256}))
             
         # QY: Add regularization for using partial tokens for reconstruction
-        if hasattr(config.model, "reconstruction_regularization"):
+        if config.model.use_reconstruction_regularization:
             self.use_regularization = True
             self.regularization_name = config.model.reconstruction_regularization.name
             self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method

@@ -363,7 +363,7 @@ def train_one_epoch(config, logger, accelerator,
             proxy_codes = None
 
         # QY: Update max mask rate based on annealing schedule if configured
-        if config.model.reconstruction_regularization.get("annealing"):
+        if config.model.reconstruction_regularization.use_annealing:
             max_mask_rate = get_titok_max_mask_rate(config, global_step)
             accelerator.unwrap_model(model).set_max_mask_rate(max_mask_rate)
 
