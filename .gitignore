@@ -7,3 +7,5 @@ titok_s128_matryoshka_annealing_stage1_run1
 stage1_dry_run
 wandb/
 .cache/
+slurm*
+output*

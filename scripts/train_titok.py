@@ -167,6 +167,9 @@ def main():
         if config.training.use_ema:
             ema_model.copy_to(model.parameters())
         model.save_pretrained_weight(output_dir)
+    # mark as done for this running
+    with open(os.path.join(output_dir, "done.txt"), "w") as f:
+        f.write("\n")
     accelerator.end_training()
 
 
