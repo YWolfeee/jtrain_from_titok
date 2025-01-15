@@ -1,7 +1,7 @@
 experiment:
-    project: "titok_s_128_stage1"
-    name: "titok_s_128_stage1_run1"
-    output_dir: "titok_s_128_stage1_run1"
+    project: "titok_l_128_4096_12_stage1"
+    name: "titok_l_128_4096_12_stage1_run1"
+    output_dir: "titok_l_128_4096_12_stage1_run1"
     max_train_examples: 1_281_167
     save_every: 50_000
     eval_every: 50_000
@@ -19,8 +19,8 @@ model:
         use_l2_norm: True
         commitment_cost: 0.25
         # vit arch
-        vit_enc_model_size: "small"
-        vit_dec_model_size: "small"
+        vit_enc_model_size: "large"
+        vit_dec_model_size: "large"
         vit_enc_patch_size: 16
         vit_dec_patch_size: 16
         num_latent_tokens: 128
@@ -59,12 +59,11 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    per_gpu_batch_size: 32
     mixed_precision: "fp16"
     enable_tf32: True
     enable_wandb: True
     use_ema: True
     seed: 42
-    max_train_steps: 1_000_000
+    max_train_steps: 1_000_000 # batch size 32
     num_generated_images: 2
     max_grad_norm: 1.0

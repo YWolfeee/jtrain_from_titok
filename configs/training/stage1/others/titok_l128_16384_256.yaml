@@ -1,7 +1,7 @@
 experiment:
-    project: "titok_l_32_stage1"
-    name: "titok_l_32_stage1_run1"
-    output_dir: "titok_l_32_stage1_run1"
+    project: "titok_l_128_16384_256_stage1"
+    name: "titok_l_128_16384_256_stage1_run1"
+    output_dir: "titok_l_128_16384_256_stage1_run1"
     max_train_examples: 1_281_167
     save_every: 50_000
     eval_every: 50_000
@@ -14,8 +14,8 @@ experiment:
 
 model:
     vq_model:
-        codebook_size: 4096
-        token_size: 12
+        codebook_size: 16384
+        token_size: 256
         use_l2_norm: True
         commitment_cost: 0.25
         # vit arch
@@ -23,10 +23,10 @@ model:
         vit_dec_model_size: "large"
         vit_enc_patch_size: 16
         vit_dec_patch_size: 16
-        num_latent_tokens: 32
+        num_latent_tokens: 128
         finetune_decoder: False
         pretrained_tokenizer_weight: "maskgit-vqgan-imagenet-f16-256.bin"
-
+    
 losses:
     quantizer_weight: 1.0
 
@@ -59,12 +59,11 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    per_gpu_batch_size: 32
     mixed_precision: "fp16"
     enable_tf32: True
     enable_wandb: True
     use_ema: True
     seed: 42
-    max_train_steps: 1_000_000
+    max_train_steps: 1_000_000 # batch size 32
     num_generated_images: 2
     max_grad_norm: 1.0

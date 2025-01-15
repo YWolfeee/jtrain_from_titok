@@ -1,7 +1,7 @@
 experiment:
-    project: "titok_b_64_stage1"
-    name: "titok_b_64_stage1_run1"
-    output_dir: "titok_b_64_stage1_run1"
+    project: "titok_s_128_4096_12_stage1"
+    name: "titok_s_128_4096_12_stage1_run1"
+    output_dir: "titok_s_128_4096_12_stage1_run1"
     max_train_examples: 1_281_167
     save_every: 50_000
     eval_every: 50_000
@@ -26,29 +26,20 @@ model:
         num_latent_tokens: 128
         finetune_decoder: False
         pretrained_tokenizer_weight: "maskgit-vqgan-imagenet-f16-256.bin"
-    reconstruction_regularization: 
-        name: matryoshka
-        mask_ratio_method: uniform
-        max_mask_rate: 0.999 # Ensure at least 1 token is used
-        annealing:
-            time_start: 0.25 # 50 epochs over 200 epochs
-            time_end: 0.75 # 150 epochs over 200 epochs
-            is_increasing: False
-
+    
 losses:
     quantizer_weight: 1.0
 
 dataset:
     params:
-        train_shards_path_or_url: "datasets/imagenet-train-{000000..000252}.tar"
-        eval_shards_path_or_url: "datasets/imagenet-val-{000000..000009}.tar"
+        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..0252}.tar"
+        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0009}.tar"
         num_workers_per_gpu: 12
     preprocessing:
         resize_shorter_edge: 256
         crop_size: 256
         random_crop: True
         random_flip: True
-
 
 optimizer:
     name: adamw 
@@ -57,6 +48,7 @@ optimizer:
         beta1: 0.9
         beta2: 0.99
         weight_decay: 1e-4
+        epsilon: 1e-8
 
 lr_scheduler:
     scheduler: "cosine"
@@ -67,12 +59,12 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    per_gpu_batch_size: 32 # Default 8 GPUS, one step 256 images
+    per_gpu_batch_size: 32
     mixed_precision: "fp16"
     enable_tf32: True
     enable_wandb: True
     use_ema: True
     seed: 42
-    max_train_steps: 1_000_000 # 1000000 steps = 200 epochs for batch size 32 on 8 GPUs
+    max_train_steps: 1_000_000
     num_generated_images: 2
     max_grad_norm: 1.0
