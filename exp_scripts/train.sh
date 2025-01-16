@@ -11,7 +11,7 @@ eval "$(conda shell.bash hook)"
 conda activate titok
 
 export PYTHONPATH=$(pwd)
-WANDB_MODE=offline accelerate launch \
+accelerate launch \
     --num_machines=1 --num_processes=1 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
@@ -26,6 +26,6 @@ WANDB_MODE=offline accelerate launch \
     model.reconstruction_regularization.annealing.time_start=0.25 \
     model.reconstruction_regularization.annealing.time_end=0.75 \
     model.reconstruction_regularization.annealing.is_increasing=False \
-    training.per_gpu_batch_size=128 \
+    training.per_gpu_batch_size=32 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \
