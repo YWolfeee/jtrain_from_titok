@@ -72,11 +72,14 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers(config.experiment.name)
+        accelerator.init_trackers(config.experiment.project)
         config_path = Path(output_dir) / "config.yaml"
         logger.info(f"Saving config to {config_path}")
         OmegaConf.save(config, config_path)
         logger.info(f"Config:\n{OmegaConf.to_yaml(config)}")
+        if config.training.enable_wandb:
+            accelerator.get_tracker(tracker).log(
+                OmegaConf.to_container(config, resolve=True))
 
     # If passed along, set the training seed now.
     if config.training.seed is not None:

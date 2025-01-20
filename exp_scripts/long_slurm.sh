@@ -23,22 +23,37 @@
 #  For any assistance needed in debugging job failures, ask for help in the slack support channel for the cluster where jobs
 #  were scheduled.
  
- 
-#SBATCH --job-name=test_titok_dynamic_long_running_job     # Specify job name, note that this is they primary "key" for the chained-jobs.
+
+#SBATCH --job-name=${SLURM_JOB_NAME}     # Specify job name, note that this is they primary "key" for the chained-jobs.
                                                         # Use different job names for multiple concurrent running long jobs.
  
  
-#SBATCH --output=output/test_titok_dynamic_long_running_job/logs/slurm_%j.out # Specify stdout file - %j will be substituted with job ID
+#SBATCH --output=outputs/${SLURM_JOB_NAME}/logs/slurm_%j.out # Specify stdout file - %j will be substituted with job ID
  
  
 #SBATCH --time=04:00:00             # Time limit
 #SBATCH --account=dir_cosmos_misc
-# SBATCH --partition=batch
-#SBATCH --gpus-per-node=4 
+#SBATCH --partition=batch
+#SBATCH --gpus-per-node=8
 #SBATCH --no-requeue                # Control all retries/attempts explicitly
 #SBATCH --dependency=singleton      # Singleton dependency - run one job at a time
- 
- 
+
+# the main key of the run is ${SLURM_JOB_NAME}, which needs to be identical 
+# from runs to runs
+
+# The following arguments are passed to main.sh, which is seperate
+config_name=$1      # name of the `yaml` to call, 'titok_l256_4096_12'
+per_gpu_batch_size=$2 # 64
+learning_rate=$3 # 2e-4
+use_reconstruction_regularization=$4         # use_reconstruction_regularization True
+use_annealing=$5    # False
+is_increasing=$6    # False
+
+
+echo "Running config: $config_name; batch_size: ${per_gpu_batch_size}; learning_rate: ${learning_rate}; user_reconstruction_regularization: ${use_reconstruction_regularization}; use_annealing: ${use_annealing}; is_increasing: ${is_increasing}."
+
+output_root='results'
+
 # Enable strict error handling to improve script reliability.
 set -euo pipefail
  
@@ -81,10 +96,10 @@ readonly SBATCH_SCRIPT=$(readlink -f "$0")
  
  
 # State that is passed from one job to the next in the chain.
-STATE_DIR="output/${SLURM_JOB_NAME}/state"
+STATE_DIR="${output_root}/${SLURM_JOB_NAME}/state"
 STATE_FILE="${STATE_DIR}/${SLURM_JOB_NAME}.json"
 CANCEL_JOB_FILE="${STATE_DIR}/cancel"
-EXP_RUN_NAME="titok_s128_matryoshka_annealing_stage1"
+EXP_RUN_NAME="${SLURM_JOB_NAME}"
  
  
 mkdir -p ${STATE_DIR}
@@ -191,10 +206,12 @@ function launch_more_jobs() {
     fi
     log_msg "Launching ${num_jobs_to_launch} jobs..."
  
- 
+    command="sbatch --job-name=${SLURM_JOB_NAME} --output='${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out' exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing"
+    echo "$command"
     for ((i = 1; i <= ${num_jobs_to_launch}; i++)); do
     log_msg "[JobId=${SLURM_JOB_ID}] Launching next job..."
-    sbatch ${SBATCH_SCRIPT}
+    # sbatch --job-name=${SLURM_JOB_NAME} --output="${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out" ${SBATCH_SCRIPT} "$@"
+    eval "$command"
     let STORED_NUM_JOBS_SCHEDULED+=1
     done
 }
@@ -208,7 +225,7 @@ function launch_more_jobs() {
 #
 # TODO: implement it
 function is_job_done() {
-    local file_path="./${EXP_RUN_NAME}_run1/done.txt"
+    local file_path="${output_root}/${EXP_RUN_NAME}/done.txt"
     if [[ -f "$file_path" ]]; then
         log_msg "Job is done (found done.txt)..."
         return 0 # done
@@ -237,17 +254,17 @@ function do_actual_work() {
     # enroot list -f
     # pwd
     enroot start --rw --mount /lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training my_workspace \
-        /bin/bash -c "source ~/.bashrc; pip show torchinfo; which accelerate; cd /joint_training/jtrain_from_titok; export PYTHONPATH='/joint_training/jtrain_from_titok'; \
-        accelerate launch \
-        --num_machines=1 --num_processes=4 --machine_rank=0 \
-        --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
-        scripts/train_titok.py config=configs/training/stage1/titok_s128_matryoshka_annealing.yaml \
-        experiment.project='${EXP_RUN_NAME}' \
-        experiment.name='${EXP_RUN_NAME}_run1' \
-        experiment.output_dir='${EXP_RUN_NAME}_run1' \
-        training.per_gpu_batch_size=32 
-        "
-        # python -c 'import utils' "
+        /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing ${output_root} ${SLURM_JOB_NAME}
+        # /bin/bash -c "source ~/.bashrc; pip show torchinfo; which accelerate; cd /joint_training/jtrain_from_titok; export PYTHONPATH='/joint_training/jtrain_from_titok'; \
+        # accelerate launch \
+        # --num_machines=1 --num_processes=4 --machine_rank=0 \
+        # --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
+        # scripts/train_titok.py config=configs/training/stage1/titok_s128_matryoshka_annealing.yaml \
+        # experiment.project='${EXP_RUN_NAME}' \
+        # experiment.name='${EXP_RUN_NAME}_run1' \
+        # experiment.output_dir='${EXP_RUN_NAME}_run1' \
+        # training.per_gpu_batch_size=32 
+        # "
  
     # Simulate a coin toss: generate a random number
     toss=$((RANDOM % 10))
@@ -338,3 +355,5 @@ update_state
  
  
 do_actual_work
+
+EOF
