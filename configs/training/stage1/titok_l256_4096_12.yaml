@@ -3,8 +3,8 @@ experiment:
     name: "titok_l_256_4096_12_stage1_run1"
     output_dir: "titok_l_256_4096_12_stage1_run1"
     max_train_examples: 1_281_167
-    save_every: 50_000
-    eval_every: 50_000
+    save_every: 5_000
+    eval_every: 5_000
     generate_every: 5_000
     log_every: 50
     log_grad_norm_every: 1_000
@@ -44,7 +44,7 @@ dataset:
 optimizer:
     name: adamw 
     params:
-        learning_rate: 1e-4
+        learning_rate: 4e-4
         beta1: 0.9
         beta2: 0.99
         weight_decay: 1e-4
@@ -59,7 +59,7 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    per_gpu_batch_size: 32
+    per_gpu_batch_size: 128
     mixed_precision: "fp16"
     enable_tf32: True
     enable_wandb: True
