@@ -141,6 +141,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.max_mask_rate = config.model.reconstruction_regularization.max_mask_rate
         else:
             self.use_regularization = False
+            self.max_mask_rate = 0.0
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -194,8 +195,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
     
     def decode(self, z_quantized, decode_mask_rate=0.0):
         # QY: Reconstruct with partial tokens
-        if self.use_regularization:
-            if self.training:
+        if self.use_regularization and self.training:
                 if self.mask_ratio_method == "uniform":
                     mask_rate = torch.empty(1).uniform_(0, self.max_mask_rate).item()
                 elif self.mask_ratio_method == "hierarchical":
@@ -203,8 +203,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                     mask_rate = values[torch.randint(0, len(values), (1,))].item()
                 else:
                     raise NotImplementedError(f"Unsupported mask ratio method {self.mask_ratio_method}.")
-            else:
-                mask_rate = decode_mask_rate
+        else:
+            mask_rate = decode_mask_rate
             
             if self.regularization_name == "matryoshka":
                 z_quantized = self.matryoshka_masking(z_quantized, mask_rate=mask_rate)
