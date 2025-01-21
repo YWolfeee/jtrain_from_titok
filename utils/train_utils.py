@@ -381,7 +381,7 @@ def train_one_epoch(config, logger, accelerator,
                 # QY: extra_results_dict should include "self_distilliated_codes"
                 current_decode_mask_rate = extra_results_dict["decode_mask_rate"]
                 self_distillated_codes = extra_results_dict["self_distilliated_codes"]
-                self_distillated_codes = torch.where(current_decode_mask_rate - 1/16 <= 0, proxy_codes, self_distillated_codes)
+                self_distillated_codes = torch.where(current_decode_mask_rate - 1/16 < 0, proxy_codes, self_distillated_codes)
                 autoencoder_loss, loss_dict = loss_module(
                     self_distillated_codes,
                     reconstructed_images,
