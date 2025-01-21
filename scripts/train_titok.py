@@ -116,7 +116,7 @@ def main():
 
     # Set up evaluator.
     evaluators = []
-    for i in range(7):
+    for i in range(4):
         evaluator = create_evaluator(config, logger, accelerator)
         evaluators.append(evaluator)
 
