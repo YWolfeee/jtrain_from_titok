@@ -5,6 +5,7 @@ experiment:
     max_train_examples: 1_281_167
     save_every: 5_000
     eval_every: 5_000
+    eval_loss_every: 5_00
     generate_every: 5_000
     log_every: 50
     log_grad_norm_every: 1_000
