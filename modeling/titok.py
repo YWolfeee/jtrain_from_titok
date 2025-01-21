@@ -205,13 +205,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             else:
                 raise NotImplementedError(f"Unsupported mask ratio method {self.mask_ratio_method}.")
         else:
-            mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.shape[0]).expand(z_quantized.shape[0])
+            mask_rate = torch.tensor(decode_mask_rate, device=device).expand(z_quantized.shape[0])
 
         return mask_rate
     
     def decode(self, z_quantized, decode_mask_rate=None):
         if isinstance(decode_mask_rate, float):
-            decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.shape[0]).expand(z_quantized.shape[0])
+            decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.device).expand(z_quantized.shape[0])
 
         # mask rate is a tensor with shape (z_quantized.shape[0],)
         # values could be identical inside            
@@ -250,7 +250,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # outside function should ensure that mask_rate is meaningful
         # e.g. belong to [0, 1)
         keep_tokens = torch.ceil(z_quantized.shape[-1] * (1 - mask_rate)).long().to(z_quantized.device)
-        
+
         mask = torch.arange(z_quantized.shape[-1], device=z_quantized.device)[None] < keep_tokens[:, None]
         return torch.where(mask[:, None, None], z_quantized, 0)
     
