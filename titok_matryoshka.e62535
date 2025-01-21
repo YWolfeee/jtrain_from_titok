@@ -1,0 +1,36 @@
+The following values were not passed to `accelerate launch` and had defaults used instead:
+	`--mixed_precision` was set to a value of `'no'`
+	`--dynamo_backend` was set to a value of `'no'`
+To avoid this warning pass in values for each of the problematic parameters or run `accelerate config`.
+/home/qiyuan/jtrain_from_titok/modeling/modules/losses.py:149: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:43: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:98: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:118: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:123: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+/home/qiyuan/jtrain_from_titok/modeling/quantizer/quantizer.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  @autocast(enabled=False)
+Traceback (most recent call last):
+  File "/home/qiyuan/jtrain_from_titok/scripts/train_titok.py", line 192, in <module>
+    main()
+  File "/home/qiyuan/jtrain_from_titok/scripts/train_titok.py", line 44, in main
+    config = get_config()
+  File "/home/qiyuan/jtrain_from_titok/utils/train_utils.py", line 47, in get_config
+    yaml_conf = OmegaConf.load(cli_conf.config)
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/omegaconf/omegaconf.py", line 189, in load
+    with io.open(os.path.abspath(file_), "r", encoding="utf-8") as f:
+FileNotFoundError: [Errno 2] No such file or directory: '/home/qiyuan/jtrain_from_titok/configs/training/stage1/titok_b64_4096_12.yaml.yaml'
+Traceback (most recent call last):
+  File "/home/qiyuan/.conda/envs/titok/bin/accelerate", line 8, in <module>
+    sys.exit(main())
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/accelerate/commands/accelerate_cli.py", line 48, in main
+    args.func(args)
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/accelerate/commands/launch.py", line 1168, in launch_command
+    simple_launcher(args)
+  File "/home/qiyuan/.conda/envs/titok/lib/python3.10/site-packages/accelerate/commands/launch.py", line 763, in simple_launcher
+    raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+subprocess.CalledProcessError: Command '['/home/qiyuan/.conda/envs/titok/bin/python', 'scripts/train_titok.py', 'config=configs/training/stage1/titok_b64_4096_12.yaml.yaml', 'experiment.project=titok_b64_4096_12.yaml_stage1', 'experiment.name=titok_b64_4096_12.yaml_stage1_run1', 'experiment.output_dir=titok_b64_4096_12.yaml_stage1_run1', 'model.use_reconstruction_regularization=True', 'model.reconstruction_regularization.name=matryoshka', 'model.reconstruction_regularization.mask_ratio_method=hierarchical', 'model.reconstruction_regularization.max_mask_rate=0.95', 'model.reconstruction_regularization.use_annealing=True', 'model.reconstruction_regularization.annealing.time_start=0.0', 'model.reconstruction_regularization.annealing.time_end=0.1', 'model.reconstruction_regularization.annealing.is_increasing=True', 'training.per_gpu_batch_size=32', 'optimizer.params.learning_rate=4e-4', 'training.max_train_steps=250_000', 'losses.use_self_distilliation=True', 'dataset.params.train_shards_path_or_url=/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar', 'dataset.params.eval_shards_path_or_url=/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar']' returned non-zero exit status 1.
