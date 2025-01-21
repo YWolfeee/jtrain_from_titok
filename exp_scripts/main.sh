@@ -33,8 +33,8 @@ accelerate launch \
     training.per_gpu_batch_size=${per_gpu_batch_size} \
     optimizer.params.learning_rate=${lr} \
     training.max_train_steps=250_000 \
-    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
-    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
+    dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar" \
+    dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar" \
 
 
 ### if using batch size 32, modify the following parameters

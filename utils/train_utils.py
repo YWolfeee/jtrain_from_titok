@@ -370,6 +370,7 @@ def train_one_epoch(config, logger, accelerator,
 
         with accelerator.accumulate([model, loss_module]):
             reconstructed_images, extra_results_dict = model(images)
+            # reconstructed_images.shape: [batch_size, 1024, H, W]
             if proxy_codes is None:
                 autoencoder_loss, loss_dict = loss_module(
                     images,
@@ -382,18 +383,31 @@ def train_one_epoch(config, logger, accelerator,
                 # QY: extra_results_dict should include "self_distilliated_codes"
                 current_decode_mask_rate = extra_results_dict["decode_mask_rate"]
                 self_distillated_codes = extra_results_dict["self_distilliated_codes"]
+                
+                # the number of classes aligning with the codebook size provided in the loss (VQGAN codebook size)
+                proxy_codes = torch.nn.functional.one_hot(proxy_codes, num_classes=1024).permute(0, 2, 1)
+                self_distillated_codes = self_distillated_codes.contiguous()
+                self_distillated_codes = self_distillated_codes.view(self_distillated_codes.shape[0], 1024, -1)
+                
+                # Expand current_decode_mask_rate to match dimensions before comparison
+                current_decode_mask_rate = current_decode_mask_rate.view(-1, 1, 1)
+                
+                # current_decode_mask_rate: [batch_size, 1, 1], proxy_codes: [batch_size, 1024, H*W], self_distillated_codes: [batch_size, 1024, H*W]
                 self_distillated_codes = torch.where(current_decode_mask_rate - 1/16 < 0, proxy_codes, self_distillated_codes)
+                self_distillated_codes = self_distillated_codes.softmax(dim=1)
                 autoencoder_loss, loss_dict = loss_module(
                     self_distillated_codes,
                     reconstructed_images,
-                    extra_results_dict
+                    extra_results_dict,
+                    mode="with_self_distilliation"
                 )
             else:
                 autoencoder_loss, loss_dict = loss_module(
                     proxy_codes,
                     reconstructed_images,
-                    extra_results_dict
-                )      
+                    extra_results_dict,
+                    mode="with_ground_truth"
+                )
 
             # Gather the losses across all processes for logging.
             autoencoder_logs = {}
@@ -835,7 +849,8 @@ def eval_loss(
                 _, loss_dict = loss_module(
                     proxy_codes,
                     reconstructed_images,
-                    extra_results_dict
+                    extra_results_dict,
+                    mode="with_ground_truth"
                 )
             current_key = f"eval_loss/{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth"
             if current_key not in eval_loss_dict:
@@ -853,10 +868,14 @@ def eval_loss(
                         mode="generator",
                     )
                 else:
+                    previous_reconstructed_images = previous_reconstructed_images.contiguous()
+                    previous_reconstructed_images = previous_reconstructed_images.view(previous_reconstructed_images.shape[0], 1024, -1)
+                    previous_reconstructed_images = previous_reconstructed_images.softmax(dim=1)
                     _, loss_dict = loss_module(
                         previous_reconstructed_images,
                         reconstructed_images,
-                        extra_results_dict
+                        extra_results_dict,
+                        mode="with_self_distilliation"
                     )
                 current_key = f"eval_loss/{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens"
                 if current_key not in eval_loss_dict:

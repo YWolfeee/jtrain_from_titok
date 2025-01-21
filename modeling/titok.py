@@ -212,7 +212,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
     def decode(self, z_quantized, decode_mask_rate=None):
         if isinstance(decode_mask_rate, float):
             decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.device).expand(z_quantized.shape[0])
-
         # mask rate is a tensor with shape (z_quantized.shape[0],)
         # values could be identical inside            
         if self.regularization_name == "matryoshka":
@@ -223,14 +222,14 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             z_quantized = self.random_masking(z_quantized, mask_rate=decode_mask_rate)
         else:
             raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
-        
+        # z_quantized.shape: [batch_size, token_dim, 1, num_tokens]
         decoded = self.decoder(z_quantized)
         if self.finetune_decoder:
             quantized_states = torch.einsum(
                 'nchw,cd->ndhw', decoded.softmax(1),
                 self.pixel_quantize.embedding.weight)
             decoded = self.pixel_decoder(quantized_states)
-
+        # decoded.shape: [batch_size, 1024, H, W]
         return decoded
     
     def decode_tokens(self, tokens, decode_mask_rate=0.0):
@@ -269,5 +268,5 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if self.config.losses.use_self_distilliation:
             with torch.no_grad():
                 result_dict["decode_mask_rate"] = decode_mask_rate
-                result_dict["self_distilliated_codes"] = self.decode(z_quantized, max(0, decode_mask_rate - 1/16))
+                result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16))
         return decoded, result_dict
