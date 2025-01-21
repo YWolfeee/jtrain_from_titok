@@ -106,7 +106,10 @@ def main():
     train_dataloader, eval_dataloader = create_dataloader(config, logger, accelerator)
 
     # Set up evaluator.
-    evaluator = create_evaluator(config, logger, accelerator)
+    evaluators = []
+    for i in range(7):
+        evaluator = create_evaluator(config, logger, accelerator)
+        evaluators.append(evaluator)
 
     # Prepare everything with accelerator.
     logger.info("Preparing model, optimizer and dataloaders")
@@ -151,7 +154,7 @@ def main():
                             optimizer, discriminator_optimizer,
                             lr_scheduler, discriminator_lr_scheduler,
                             train_dataloader, eval_dataloader,
-                            evaluator,
+                            evaluators,
                             global_step,
                             pretrained_tokenizer=pretrained_tokenizer)
         # Stop training if max steps is reached.
