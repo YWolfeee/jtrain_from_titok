@@ -88,7 +88,6 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
         reconstructions = reconstructions.contiguous()
         loss_fct = nn.CrossEntropyLoss(reduction="mean")
         batch_size = reconstructions.shape[0]
-        print("!!!! in reconstruction_loss", reconstructions.shape, target_codes.shape)
         if mode == "with_ground_truth":
             # reconstructions.shape: [batch_size, codebook_size, H, W]
             # target_codes.shape: [batch_size, H * W]
