@@ -331,7 +331,7 @@ def train_one_epoch(config, logger, accelerator,
                     optimizer, discriminator_optimizer,
                     lr_scheduler, discriminator_lr_scheduler,
                     train_dataloader, eval_dataloader,
-                    evaluator,
+                    evaluators,
                     global_step,
                     pretrained_tokenizer=None):
     """One epoch training."""
@@ -536,46 +536,59 @@ def train_one_epoch(config, logger, accelerator,
                     ema_model.store(model.parameters())
                     ema_model.copy_to(model.parameters())
                     # Eval for EMA.
-                    decode_mask_rate_list = [0.0, 0.25, 0.5, 0.75]
-                    for decode_mask_rate in decode_mask_rate_list:
-                        eval_scores = eval_reconstruction(
-                            model,
-                            eval_dataloader,
-                            accelerator,
-                            evaluator,
-                            pretrained_tokenizer=pretrained_tokenizer,
-                            decode_mask_rate=decode_mask_rate
-                        )
+                    decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
+                    eval_scores = eval_reconstruction(
+                        model,
+                        eval_dataloader,
+                        accelerator,
+                        evaluators,
+                        pretrained_tokenizer=pretrained_tokenizer
+                    )
+                    for i in range(4):
                         logger.info(
-                            f"EMA EVALUATION with {(1 - decode_mask_rate) * 100}% tokens"
+                            f"EMA EVALUATION with {(1 - decode_mask_rates[i]) * 100}% tokens"
                             f"Step: {global_step + 1} "
                         )
-                        logger.info(pprint.pformat(eval_scores))
+                        logger.info(
+                            f"Compared to ground truth"
+                        )
+                        logger.info(pprint.pformat(eval_scores[i]))
+                        if i >= 1:
+                            logger.info(
+                                f"Compared to images decoded withmore tokens"
+                            )
+                            logger.info(pprint.pformat(eval_scores[i+3]))
+                        
                         if accelerator.is_main_process:
-                            eval_log = {f'ema_eval_{(1 - decode_mask_rate) * 100}%_tokens/'+k: v for k, v in eval_scores.items()}
+                            eval_log = {f'ema_eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
+                            if i >= 1:
+                                eval_log.update({f'ema_eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens/'+k: v for k, v in eval_scores[i+3].items()})
                             accelerator.log(eval_log, step=global_step + 1)
+                        
                     if config.training.get("use_ema", False):
                         # Switch back to the original model parameters for training.
                         ema_model.restore(model.parameters())
                 else:
                     # Eval for non-EMA.
-                    decode_mask_rate_list = [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
-                    for decode_mask_rate in decode_mask_rate_list:
-                        eval_scores = eval_reconstruction(
-                            model,
-                            eval_dataloader,
-                            accelerator,
-                            evaluator,
-                            pretrained_tokenizer=pretrained_tokenizer,
-                            decode_mask_rate=decode_mask_rate
-                        )
+                    for i in range(4):
                         logger.info(
-                            f"EMA EVALUATION with {(1 - decode_mask_rate) * 100}% tokens"
+                            f"EVALUATION with {(1 - decode_mask_rates[i]) * 100}% tokens"
                             f"Step: {global_step + 1} "
                         )
-                        logger.info(pprint.pformat(eval_scores))
+                        logger.info(
+                            f"Compared to ground truth"
+                        )
+                        logger.info(pprint.pformat(eval_scores[i]))
+                        if i >= 1:
+                            logger.info(
+                                f"Compared to images decoded withmore tokens"
+                            )
+                            logger.info(pprint.pformat(eval_scores[i+3]))
+                        
                         if accelerator.is_main_process:
-                            eval_log = {f'eval_{(1 - decode_mask_rate) * 100}%_tokens/'+k: v for k, v in eval_scores.items()}
+                            eval_log = {f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
+                            if i >= 1:
+                                eval_log.update({f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens/'+k: v for k, v in eval_scores[i+3].items()})
                             accelerator.log(eval_log, step=global_step + 1)
 
                 accelerator.wait_for_everyone()
@@ -789,30 +802,46 @@ def eval_reconstruction(
     model,
     eval_loader,
     accelerator,
-    evaluator,
-    pretrained_tokenizer=None,
-    decode_mask_rate=0.0
+    evaluators,
+    pretrained_tokenizer=None
 ):
     model.eval()
-    evaluator.reset_metrics()
+    # There are totally 7 evalators:
+    # 4 for [0.0, gt], [0.25, gt], [0.5, gt], [0.75, gt]
+    # 3 for [0.0, 0.25], [0.25, 0.5], [0.5, 0.75]
+
+    if len(evaluators) != 7:
+        raise ValueError(f"Evaluator length should be 7, but got {len(evaluators)}")
+    
+    for evaluator in evaluators:
+        evaluator.reset_metrics()
     local_model = accelerator.unwrap_model(model)
+
+    decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
 
     for batch in eval_loader:
         images = batch["image"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
+        images_lists = []
         original_images = torch.clone(images)
-        reconstructed_images, model_dict = local_model(images, decode_mask_rate=decode_mask_rate)
-        if pretrained_tokenizer is not None:
-            reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
-        reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
-        # Quantize to uint8
-        reconstructed_images = torch.round(reconstructed_images * 255.0) / 255.0
         original_images = torch.clamp(original_images, 0.0, 1.0)
-        # For VQ model.
-        evaluator.update(original_images, reconstructed_images.squeeze(2), model_dict["min_encoding_indices"])
+        for decode_mask_rate in decode_mask_rates:
+            reconstructed_images, model_dict = local_model(images, decode_mask_rate=decode_mask_rate)
+            if pretrained_tokenizer is not None:
+                reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+            reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
+            # Quantize to uint8
+            reconstructed_images = torch.round(reconstructed_images * 255.0) / 255.0
+            images_lists.append(reconstructed_images)
+        
+        for i in range(4):
+            evaluators[i].update(original_images, images_lists[i].squeeze(2), model_dict["min_encoding_indices"])
+        for i in range(4, 7):
+            evaluators[i].update(images_lists[i-4].squeeze(2), images_lists[i-3].squeeze(2), model_dict["min_encoding_indices"])
+    
     model.train()
-    return evaluator.result()
+    return [evaluator.result() for evaluator in evaluators]
 
 
 @torch.no_grad()
