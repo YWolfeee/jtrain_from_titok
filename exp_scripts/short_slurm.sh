@@ -21,18 +21,18 @@ accelerate launch \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="temp" \
-    experiment.name="${config_name}_bz=128+lr=4e-4" \
+    experiment.name="${config_name}_hier" \
     experiment.output_dir="temp/${config_name}_stage1_run1" \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
-    model.reconstruction_regularization.mask_ratio_method='uniform' \
+    model.reconstruction_regularization.mask_ratio_method='hierarchical' \
     model.reconstruction_regularization.max_mask_rate=0.95 \
     model.reconstruction_regularization.use_annealing=True \
     model.reconstruction_regularization.annealing.time_start=0.25 \
     model.reconstruction_regularization.annealing.time_end=0.75 \
     model.reconstruction_regularization.annealing.is_increasing=False \
-    training.per_gpu_batch_size=128 \
-    optimizer.params.learning_rate=4e-4 \
+    training.per_gpu_batch_size=64 \
+    optimizer.params.learning_rate=2e-4 \
     training.max_train_steps=250_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \

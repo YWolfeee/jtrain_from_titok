@@ -194,14 +194,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         return z_quantized, result_dict
 
     def get_mask_rate(self, z_quantized, decode_mask_rate=0.0):
+        device = z_quantized.device
         if self.use_regularization and self.training:
             if self.mask_ratio_method == "uniform":
-                mask_rate = torch.empty(z_quantized.shape[0], device=z_quantized.device).uniform_(0, self.max_mask_rate - 1e-3)
+                mask_rate = torch.empty(z_quantized.shape[0], device=device).uniform_(0, self.max_mask_rate - 1e-3)
             elif self.mask_ratio_method == "hierarchical":
-                values = torch.tensor([self.max_mask_rate * i / 16 for i in range(16)])  # we do not consider zero-token setting
-                # expand to batch
-                values = values[None].expand(z_quantized.shape[0], -1)
-                indices = torch.randint(0, values.shape[0], (z_quantized.shape[0],), device=z_quantized.device)
+                values = torch.tensor([self.max_mask_rate * i / 16 for i in range(16)], device=device)  # we do not consider zero-token setting
+                indices = torch.randint(0, values.shape[0], (z_quantized.shape[0],), device=device)
                 mask_rate = values[indices]
             else:
                 raise NotImplementedError(f"Unsupported mask ratio method {self.mask_ratio_method}.")
