@@ -565,16 +565,9 @@ def train_one_epoch(config, logger, accelerator,
                             f"Compared to ground truth"
                         )
                         logger.info(pprint.pformat(eval_scores[i]))
-                        if i >= 1:
-                            logger.info(
-                                f"Compared to images decoded withmore tokens"
-                            )
-                            logger.info(pprint.pformat(eval_scores[i+3]))
                         
                         if accelerator.is_main_process:
                             eval_log = {f'ema_eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
-                            if i >= 1:
-                                eval_log.update({f'ema_eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens/'+k: v for k, v in eval_scores[i+3].items()})
                             accelerator.log(eval_log, step=global_step + 1)
                         
                     if config.training.get("use_ema", False):
@@ -591,16 +584,9 @@ def train_one_epoch(config, logger, accelerator,
                             f"Compared to ground truth"
                         )
                         logger.info(pprint.pformat(eval_scores[i]))
-                        if i >= 1:
-                            logger.info(
-                                f"Compared to images decoded withmore tokens"
-                            )
-                            logger.info(pprint.pformat(eval_scores[i+3]))
                         
                         if accelerator.is_main_process:
                             eval_log = {f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
-                            if i >= 1:
-                                eval_log.update({f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens/'+k: v for k, v in eval_scores[i+3].items()})
                             accelerator.log(eval_log, step=global_step + 1)
 
                 accelerator.wait_for_everyone()
@@ -805,7 +791,6 @@ def train_one_epoch_generator(
                 )
                 break
 
-
     return global_step
 
 @torch.no_grad()
@@ -815,9 +800,9 @@ def eval_loss(
     accelerator,
     loss_module,
     pretrained_tokenizer=None,
-    sampled_batches=5
+    sampled_batches=4
 ):
-    decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
+    decode_mask_rates = [i / 16 for i in range(16)]
     local_model = accelerator.unwrap_model(model)
     model.eval()
     eval_loss_dict = {}
@@ -895,11 +880,10 @@ def eval_reconstruction(
     pretrained_tokenizer=None
 ):
     model.eval()
-    # There are totally 7 evalators:
+    # There are totally 4 evalators:
     # 4 for [0.0, gt], [0.25, gt], [0.5, gt], [0.75, gt]
-    # 3 for [0.0, 0.25], [0.25, 0.5], [0.5, 0.75]
 
-    if len(evaluators) != 7:
+    if len(evaluators) != 4:
         raise ValueError(f"Evaluator length should be 7, but got {len(evaluators)}")
     
     for evaluator in evaluators:
@@ -926,8 +910,6 @@ def eval_reconstruction(
         
         for i in range(4):
             evaluators[i].update(original_images, images_lists[i].squeeze(2), model_dict["min_encoding_indices"])
-        for i in range(4, 7):
-            evaluators[i].update(images_lists[i-4].squeeze(2), images_lists[i-3].squeeze(2), model_dict["min_encoding_indices"])
     
     model.train()
     return [evaluator.result() for evaluator in evaluators]
