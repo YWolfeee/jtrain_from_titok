@@ -192,31 +192,36 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 result_dict = posteriors
 
         return z_quantized, result_dict
-    
-    def decode(self, z_quantized, decode_mask_rate=0.0):
-        # QY: Reconstruct with partial tokens
+
+    def get_mask_rate(self, z_quantized, decode_mask_rate=0.0):
         if self.use_regularization and self.training:
-                if self.mask_ratio_method == "uniform":
-                    mask_rate = torch.empty(z_quantized.shape[0], device=z_quantized.device).uniform_(0, self.max_mask_rate - 1e-3).item()
-                elif self.mask_ratio_method == "hierarchical":
-                    values = torch.tensor([self.max_mask_rate * i / 16 for i in range(16)])  # we do not consider zero-token setting
-                    # expand to batch
-                    values = values[None].expand(z_quantized.shape[0], -1)
-                    indices = torch.randint(0, values.shape[0], (z_quantized.shape[0],), device=z_quantized.device)
-                    mask_rate = values[indices]
-                else:
-                    raise NotImplementedError(f"Unsupported mask ratio method {self.mask_ratio_method}.")
+            if self.mask_ratio_method == "uniform":
+                mask_rate = torch.empty(z_quantized.shape[0], device=z_quantized.device).uniform_(0, self.max_mask_rate - 1e-3).item()
+            elif self.mask_ratio_method == "hierarchical":
+                values = torch.tensor([self.max_mask_rate * i / 16 for i in range(16)])  # we do not consider zero-token setting
+                # expand to batch
+                values = values[None].expand(z_quantized.shape[0], -1)
+                indices = torch.randint(0, values.shape[0], (z_quantized.shape[0],), device=z_quantized.device)
+                mask_rate = values[indices]
+            else:
+                raise NotImplementedError(f"Unsupported mask ratio method {self.mask_ratio_method}.")
         else:
             mask_rate = decode_mask_rate.expand(z_quantized.shape[0])
+
+        return mask_rate
+    
+    def decode(self, z_quantized, decode_mask_rate=None):
+        if isinstance(decode_mask_rate, float):
+            raise ValueError("decode_mask_rate should be a tensor processed by get_mask_rate firstly")
 
         # mask rate is a tensor with shape (z_quantized.shape[0],)
         # values could be identical inside            
         if self.regularization_name == "matryoshka":
-            z_quantized = self.matryoshka_masking(z_quantized, mask_rate=mask_rate)
+            z_quantized = self.matryoshka_masking(z_quantized, mask_rate=decode_mask_rate)
         elif self.regularization_name == "random":
             raise NotImplementedError(
                 "This training approach has been deprecated.")
-            z_quantized = self.random_masking(z_quantized, mask_rate=mask_rate)
+            z_quantized = self.random_masking(z_quantized, mask_rate=decode_mask_rate)
         else:
             raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
         
@@ -226,6 +231,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 'nchw,cd->ndhw', decoded.softmax(1),
                 self.pixel_quantize.embedding.weight)
             decoded = self.pixel_decoder(quantized_states)
+
         return decoded
     
     def decode_tokens(self, tokens, decode_mask_rate=0.0):
@@ -237,6 +243,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             z_quantized = rearrange(z_quantized, 'b h w c -> b c h w').contiguous()
         elif self.quantize_mode == "vae":
             z_quantized = tokens
+        decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
         decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         return decoded
     
@@ -248,12 +255,20 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         mask = torch.arange(z_quantized.shape[-1], device=z_quantized.device)[None] < keep_tokens[:, None]
         return torch.where(mask[:, None, None], z_quantized, 0)
     
-    def random_masking(self, z_quantized, mask_rate=0.5):
+    def random_masking(self, z_quantized, mask_rate):
         mask = torch.rand_like(z_quantized[0:1, 0:1, 0:1, :]) > mask_rate
         z_quantized = z_quantized * mask.to(z_quantized.dtype, z_quantized.device)
         return z_quantized
     
     def forward(self, x, decode_mask_rate=0.0):
+        if not isinstance(decode_mask_rate, float):
+            raise ValueError("decode_mask_rate in forward() should be a float")
+        
         z_quantized, result_dict = self.encode(x)
+        decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
         decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
+        if self.config.losses.use_self_distilliation:
+            with torch.no_grad():
+                result_dict["decode_mask_rate"] = decode_mask_rate
+                result_dict["self_distilliated_codes"] = self.decode(z_quantized, max(0, decode_mask_rate - 1/16))
         return decoded, result_dict
