@@ -528,6 +528,18 @@ def train_one_epoch(config, logger, accelerator,
                     # Switch back to the original model parameters for training.
                     ema_model.restore(model.parameters())
 
+            if (global_step + 1) % config.experiment.eval_loss_every == 0:
+                logger.info(f"Global step: {global_step + 1}")
+                eval_loss_dict = eval_loss(
+                    model,
+                    train_dataloader,
+                    accelerator,
+                    loss_module,
+                    pretrained_tokenizer=pretrained_tokenizer
+                )
+                logger.info(pprint.pformat(eval_loss_dict))
+                eval_loss_log = {f'eval_loss/'+k: v for k, v in eval_loss_dict.items()}
+                accelerator.log(eval_loss_log, step=global_step + 1)
 
             # Evaluate reconstruction.
             if eval_dataloader is not None and (global_step + 1) % config.experiment.eval_every == 0:
@@ -795,6 +807,83 @@ def train_one_epoch_generator(
 
 
     return global_step
+
+@torch.no_grad()
+def eval_loss(
+    model,
+    eval_loader,
+    accelerator,
+    loss_module,
+    pretrained_tokenizer=None,
+    sampled_batches=5
+):
+    decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
+    local_model = accelerator.unwrap_model(model)
+    model.eval()
+    eval_loss_dict = {}
+    t = 0
+    for batch in eval_loader:
+        if t > sampled_batches:
+            break
+        images = batch["image"].to(
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+        )
+        if pretrained_tokenizer is not None:
+            pretrained_tokenizer.eval()
+            proxy_codes = pretrained_tokenizer.encode(images)
+        for i, decode_mask_rate in enumerate(decode_mask_rates):
+            reconstructed_images, extra_results_dict = local_model(images, decode_mask_rate=decode_mask_rate)
+            # compare with ground truth
+            if proxy_codes is None:
+                _, loss_dict = loss_module(
+                    images,
+                    reconstructed_images,
+                    extra_results_dict,
+                    0, # ignore effect of global_step in this step
+                    mode="generator",
+                )
+            else:
+                _, loss_dict = loss_module(
+                    proxy_codes,
+                    reconstructed_images,
+                    extra_results_dict
+                )
+            current_key = f"eval_loss/{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth"
+            if current_key not in eval_loss_dict:
+                eval_loss_dict[current_key] = loss_dict["reconstruction_loss"].mean().item()
+            else:
+                eval_loss_dict[current_key] += loss_dict["reconstruction_loss"].mean().item()
+
+            if t >= 1:
+                if proxy_codes is None:
+                    _, loss_dict = loss_module(
+                        previous_reconstructed_images,
+                        reconstructed_images,
+                        extra_results_dict,
+                        0, # ignore effect of global_step in this step
+                        mode="generator",
+                    )
+                else:
+                    _, loss_dict = loss_module(
+                        previous_reconstructed_images,
+                        reconstructed_images,
+                        extra_results_dict
+                    )
+                current_key = f"eval_loss/{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens"
+                if current_key not in eval_loss_dict:
+                    eval_loss_dict[current_key] = loss_dict["reconstruction_loss"].mean().item()
+                else:
+                    eval_loss_dict[current_key] += loss_dict["reconstruction_loss"].mean().item()
+            
+            previous_reconstructed_images = reconstructed_images
+            t += 1
+
+    for k, v in eval_loss_dict.items():
+        eval_loss_dict[k] = v / sampled_batches
+
+    model.train()
+    return eval_loss_dict
+
 
 
 @torch.no_grad()
