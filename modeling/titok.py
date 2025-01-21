@@ -212,7 +212,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
     
     def decode(self, z_quantized, decode_mask_rate=None):
         if isinstance(decode_mask_rate, float):
-            raise ValueError("decode_mask_rate should be a tensor processed by get_mask_rate firstly")
+            decode_mask_rate = decode_mask_rate.expand(z_quantized.shape[0])
 
         # mask rate is a tensor with shape (z_quantized.shape[0],)
         # values could be identical inside            
