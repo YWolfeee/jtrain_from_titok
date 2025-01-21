@@ -72,7 +72,16 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers(config.experiment.project)
+        accelerator.init_trackers(
+            project_name=config.experiment.project,
+            config=OmegaConf.to_container(config, resolve=True),
+            init_kwargs={
+                "wandb": {
+                    "entity": "pixel-based-LM",
+                    "name": config.experiment.name,
+                    "id": config.experiment.name,
+                }
+            })
         config_path = Path(output_dir) / "config.yaml"
         logger.info(f"Saving config to {config_path}")
         OmegaConf.save(config, config_path)

@@ -27,10 +27,6 @@
 #SBATCH --job-name=${SLURM_JOB_NAME}     # Specify job name, note that this is they primary "key" for the chained-jobs.
                                                         # Use different job names for multiple concurrent running long jobs.
  
- 
-#SBATCH --output=outputs/${SLURM_JOB_NAME}/logs/slurm_%j.out # Specify stdout file - %j will be substituted with job ID
- 
- 
 #SBATCH --time=04:00:00             # Time limit
 #SBATCH --account=dir_cosmos_misc
 #SBATCH --partition=batch
@@ -48,11 +44,11 @@ learning_rate=$3 # 2e-4
 use_reconstruction_regularization=$4         # use_reconstruction_regularization True
 use_annealing=$5    # False
 is_increasing=$6    # False
+output_root=$7      
 
 
-echo "Running config: $config_name; batch_size: ${per_gpu_batch_size}; learning_rate: ${learning_rate}; user_reconstruction_regularization: ${use_reconstruction_regularization}; use_annealing: ${use_annealing}; is_increasing: ${is_increasing}."
+echo "Running config: $config_name; batch_size: ${per_gpu_batch_size}; learning_rate: ${learning_rate}; user_reconstruction_regularization: ${use_reconstruction_regularization}; use_annealing: ${use_annealing}; is_increasing: ${is_increasing}; output_root: ${output_root}."
 
-output_root='results'
 
 # Enable strict error handling to improve script reliability.
 set -euo pipefail
