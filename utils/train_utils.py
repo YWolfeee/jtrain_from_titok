@@ -343,6 +343,7 @@ def train_one_epoch(config, logger, accelerator,
 
     autoencoder_logs = defaultdict(float)
     discriminator_logs = defaultdict(float)
+    log_images = None
     for i, batch in enumerate(train_dataloader):
         model.train()
         if "image" in batch:
@@ -512,10 +513,13 @@ def train_one_epoch(config, logger, accelerator,
                     ema_model.store(model.parameters())
                     ema_model.copy_to(model.parameters())
 
+                if log_images is None:
+                    log_images = images[:config.training.num_generated_images]
+                    log_fnames = fnames[:config.training.num_generated_images]
                 reconstruct_images(
                     model,
-                    images[:config.training.num_generated_images],
-                    fnames[:config.training.num_generated_images],
+                    log_images,
+                    log_fnames,
                     accelerator,
                     global_step + 1,
                     config.experiment.output_dir,
@@ -1006,6 +1010,16 @@ def generate_images(model, tokenizer, accelerator,
 
 def save_checkpoint(model, output_dir, accelerator, global_step, logger) -> Path:
     save_path = Path(output_dir) / f"checkpoint-{global_step}"
+
+    # Delete oldest checkpoint if more than 3 exist
+    if accelerator.is_main_process:
+        checkpoints = sorted([d for d in Path(output_dir).iterdir() if d.is_dir() and d.name.startswith("checkpoint-")], 
+                           key=lambda x: int(x.name.split("-")[1]))  # Sort by checkpoint number
+        if len(checkpoints) >= 3:
+            oldest_checkpoint = checkpoints[0]  # First one has lowest number
+            import shutil
+            shutil.rmtree(oldest_checkpoint)
+            logger.info(f"Removed old checkpoint at {oldest_checkpoint}")
 
     state_dict = accelerator.get_state_dict(model)
     if accelerator.is_main_process:
