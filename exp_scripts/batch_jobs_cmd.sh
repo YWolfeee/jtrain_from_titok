@@ -20,6 +20,7 @@ settings=(
 # Define other parameters
 per_gpu_batch_size=64
 learning_rate=2e-4
+output_root="results"
 
 # Loop through each YAML file
 for config_file in "${config_files[@]}"; do
@@ -36,7 +37,7 @@ for config_file in "${config_files[@]}"; do
         jobname="${config_name}+bz=${per_gpu_batch_size}+lr=${learning_rate}+use_reconstruction_regularization=${use_reconstruction_regularization}+use_annealing=${use_annealing}+is_increasing=${is_increasing}"
 
         # Submit the job
-        sbatch --job-name=$jobname --output="results/$jobname/logs/slurm_%j.out" \
-            exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing
+        sbatch --job-name=$jobname --output="$output_root/$jobname/logs/slurm_%j.out" \
+            exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing $output_root
     done
 done
