@@ -75,19 +75,32 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 target_codes: torch.Tensor,
                 reconstructions: torch.Tensor,
                 quantizer_loss: torch.Tensor,
+                mode: str = "with_ground_truth"
                 ) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
-        return self._forward_generator(target_codes, reconstructions, quantizer_loss)
+        return self._forward_generator(target_codes, reconstructions, quantizer_loss, mode=mode)
 
     def _forward_generator(self,
                            target_codes: torch.Tensor,
                            reconstructions: torch.Tensor,
                            quantizer_loss: Mapping[Text, torch.Tensor],
+                           mode: str = "with_ground_truth"
                            ) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
         reconstructions = reconstructions.contiguous()
         loss_fct = nn.CrossEntropyLoss(reduction="mean")
         batch_size = reconstructions.shape[0]
-        reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
-                                        target_codes.view(batch_size, -1))
+        print("!!!! in reconstruction_loss", reconstructions.shape, target_codes.shape)
+        if mode == "with_ground_truth":
+            # reconstructions.shape: [batch_size, codebook_size, H, W]
+            # target_codes.shape: [batch_size, H * W]
+            reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
+                                            target_codes.view(batch_size, -1))
+        elif mode == "with_self_distilliation":
+            # reconstructions.shape: [batch_size, codebook_size, H, W]
+            # target_codes.shape: [batch_size, codebook_size, H, W]
+            reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
+                                            target_codes.view(batch_size, self.target_codebook_size, -1))
+        else:
+            raise ValueError(f"Unsupported loss mode {mode}")
         total_loss = reconstruction_loss + \
             self.quantizer_weight * quantizer_loss["quantizer_loss"]
 
