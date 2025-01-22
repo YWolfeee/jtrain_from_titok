@@ -136,12 +136,14 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # QY: Add regularization for using partial tokens for reconstruction
         if config.model.use_reconstruction_regularization:
             self.use_regularization = True
-            self.regularization_name = config.model.reconstruction_regularization.name
-            self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
             self.max_mask_rate = config.model.reconstruction_regularization.max_mask_rate
         else:
             self.use_regularization = False
             self.max_mask_rate = 0.0
+        
+        # Even for not using regularization, we still set these parameters for evaluation
+        self.regularization_name = config.model.reconstruction_regularization.name
+        self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -253,7 +255,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # outside function should ensure that mask_rate is meaningful
         # e.g. belong to [0, 1)
         keep_tokens = torch.ceil(z_quantized.shape[-1] * (1 - mask_rate)).long().to(z_quantized.device)
-
         mask = torch.arange(z_quantized.shape[-1], device=z_quantized.device)[None] < keep_tokens[:, None]
         return torch.where(mask[:, None, None], z_quantized, 0)
     
@@ -270,7 +271,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
         decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         if self.config.losses.use_self_distilliation:
-            with torch.no_grad():
-                result_dict["decode_mask_rate"] = decode_mask_rate
-                result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16))
+            result_dict["decode_mask_rate"] = decode_mask_rate
+            result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16)).detach()
         return decoded, result_dict
