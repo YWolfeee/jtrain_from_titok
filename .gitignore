@@ -6,6 +6,7 @@ deprecated_titok_b64_stage1_run1
 titok_s128_matryoshka_annealing_stage1_run1
 stage1_dry_run
 dry_run_stage1_run1
+titok_b64_4096_12_stage1_run1
 wandb/
 .cache/
 slurm*

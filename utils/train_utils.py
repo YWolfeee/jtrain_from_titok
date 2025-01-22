@@ -385,7 +385,7 @@ def train_one_epoch(config, logger, accelerator,
                 self_distillated_codes = extra_results_dict["self_distilliated_codes"]
                 
                 # the number of classes aligning with the codebook size provided in the loss (VQGAN codebook size)
-                proxy_codes = torch.nn.functional.one_hot(proxy_codes, num_classes=1024).permute(0, 2, 1)
+                proxy_codes = torch.nn.functional.one_hot(proxy_codes, num_classes=1024).permute(0, 2, 1).to(self_distillated_codes.dtype)
                 self_distillated_codes = self_distillated_codes.contiguous()
                 self_distillated_codes = self_distillated_codes.view(self_distillated_codes.shape[0], 1024, -1)
                 
@@ -854,9 +854,9 @@ def eval_loss(
                 )
             current_key = f"{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth"
             if current_key not in eval_loss_dict:
-                eval_loss_dict[current_key] = loss_dict["reconstruction_loss"].mean().item()
+                eval_loss_dict[current_key] = accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
             else:
-                eval_loss_dict[current_key] += loss_dict["reconstruction_loss"].mean().item()
+                eval_loss_dict[current_key] += accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
 
             if i >= 1:
                 if proxy_codes is None:
@@ -879,15 +879,15 @@ def eval_loss(
                     )
                 current_key = f"{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens"
                 if current_key not in eval_loss_dict:
-                    eval_loss_dict[current_key] = loss_dict["reconstruction_loss"].mean().item()
+                    eval_loss_dict[current_key] = accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
                 else:
-                    eval_loss_dict[current_key] += loss_dict["reconstruction_loss"].mean().item()
+                    eval_loss_dict[current_key] += accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
             
             previous_reconstructed_images = reconstructed_images
             t += 1
 
-    for k, v in eval_loss_dict.items():
-        eval_loss_dict[k] = v / sampled_batches
+    # for k, v in eval_loss_dict.items():
+    #     eval_loss_dict[k] = v / sampled_batches
 
     model.train()
     return eval_loss_dict
@@ -907,7 +907,7 @@ def eval_reconstruction(
     # 4 for [0.0, gt], [0.25, gt], [0.5, gt], [0.75, gt]
 
     if len(evaluators) != 4:
-        raise ValueError(f"Evaluator length should be 7, but got {len(evaluators)}")
+        raise ValueError(f"Evaluator length should be 4, but got {len(evaluators)}")
     
     for evaluator in evaluators:
         evaluator.reset_metrics()
@@ -933,7 +933,7 @@ def eval_reconstruction(
         
         for i in range(4):
             evaluators[i].update(original_images, images_lists[i].squeeze(2), model_dict["min_encoding_indices"])
-    
+
     model.train()
     return [evaluator.result() for evaluator in evaluators]
 
