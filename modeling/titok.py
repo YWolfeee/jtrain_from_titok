@@ -270,6 +270,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         z_quantized, result_dict = self.encode(x)
         decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
         decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
+        # DEBUG: If use self-distill, the decode_mask_rate should be used to determine which part corresponds to ground truth (if some is less than 1/16)
+        #        The self-distilliated codes are later used to compute the loss, we detach them to avoid back-propagation on decoder twice
+        #        The decode_mask_rate is correct in dry_run
         if self.config.losses.use_self_distilliation:
             result_dict["decode_mask_rate"] = decode_mask_rate
             result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16)).detach()

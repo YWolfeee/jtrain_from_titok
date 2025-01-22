@@ -380,23 +380,40 @@ def train_one_epoch(config, logger, accelerator,
                     mode="generator",
                 )
             elif config.losses.use_self_distilliation:
-                # QY: extra_results_dict should include "self_distilliated_codes"
+                # DEBUG: extra_results_dict should include "decode_mask_rate" and "self_distilliated_codes" in train_titok.py forward()
                 current_decode_mask_rate = extra_results_dict["decode_mask_rate"]
                 self_distillated_codes = extra_results_dict["self_distilliated_codes"]
                 
-                # the number of classes aligning with the codebook size provided in the loss (VQGAN codebook size)
-                proxy_codes = torch.nn.functional.one_hot(proxy_codes, num_classes=1024).permute(0, 2, 1).to(self_distillated_codes.dtype)
+                # DEBUG: the number of classes aligning with the codebook size provided in the loss 
+                #       (VQGAN codebook size, as defined in losses.py ReconstructionLoss_Stage1.target_codebook_size)
+                
+                # DEBUG: self_distillated_codes currently is in the same shape as reconstructed_images [batch_size, 1024, H, W]
+                #       Reshape it to [batch_size, 1024, H*W] for softmax operation and replacement operation
                 self_distillated_codes = self_distillated_codes.contiguous()
                 self_distillated_codes = self_distillated_codes.view(self_distillated_codes.shape[0], 1024, -1)
                 
-                # Expand current_decode_mask_rate to match dimensions before comparison
+                # DEBUG: self_distillated_codes so far is still vector, to enable its computation for further cross-entropy loss
+                #        We need to convert it to a probability distribution over the codebook size
+                self_distillated_codes = self_distillated_codes.softmax(dim=1)
+
+                # DEBUG: proxy_codes is in shape of [batch_size, H*W], where each proxy_codes[i][j] is the index of the codebook
+                #       Originally, it will be fed as the y (hard label) in the later compuation of cross-entropy loss nn.CrossEntropyLoss()
+                #       But self_distillated_codes is not index of codebook (but a prob distribution), so we need to convert proxy_codes to one-hot vector
+                #       This is for the later stage of torch.where(operation)
+                proxy_codes = torch.nn.functional.one_hot(proxy_codes, num_classes=1024).permute(0, 2, 1).to(self_distillated_codes.dtype)
+                
+                # DEBUG: current_decode_mask_rate is in shape of [batch_size, ]
+                #       Expand current_decode_mask_rate to match dimensions [batch_size, 1024, H*W]
                 current_decode_mask_rate = current_decode_mask_rate.view(-1, 1, 1)
                 
                 # current_decode_mask_rate: [batch_size, 1, 1], proxy_codes: [batch_size, 1024, H*W], self_distillated_codes: [batch_size, 1024, H*W]
+                # DEBUG: This is to replace the self-distilliated codes with the proxy codes if the decode_mask_rate is 0 (< 1/16)
                 self_distillated_codes = torch.where(current_decode_mask_rate - 1/16 < 0, proxy_codes, self_distillated_codes)
-                self_distillated_codes = self_distillated_codes.softmax(dim=1)
+                
+                # DEBUG: to handle different shape of code provided (index or distribution)
+                #        we set mode="with_self_distilliation" for distribution, "with_ground_truth" for index
                 autoencoder_loss, loss_dict = loss_module(
-                    self_distillated_codes,
+                    self_distillated_codes, # DEBUG: change this to proxy_codes can work properly (loss can decrease), but self_distilliated_codes will make loss stuck
                     reconstructed_images,
                     extra_results_dict,
                     mode="with_self_distilliation"
