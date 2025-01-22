@@ -267,7 +267,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
         decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         if self.config.losses.use_self_distilliation:
-            with torch.no_grad():
-                result_dict["decode_mask_rate"] = decode_mask_rate
-                result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16))
+            result_dict["decode_mask_rate"] = decode_mask_rate
+            result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16)).detach()
         return decoded, result_dict
