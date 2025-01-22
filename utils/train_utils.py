@@ -826,7 +826,7 @@ def eval_loss(
     eval_loss_dict = {}
     t = 0
     for batch in eval_loader:
-        if t > sampled_batches:
+        if t >= sampled_batches:
             break
         images = batch["image"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
@@ -884,10 +884,10 @@ def eval_loss(
                     eval_loss_dict[current_key] += accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
             
             previous_reconstructed_images = reconstructed_images
-            t += 1
+        t += 1
 
-    # for k, v in eval_loss_dict.items():
-    #     eval_loss_dict[k] = v / sampled_batches
+    for k, v in eval_loss_dict.items():
+        eval_loss_dict[k] = v / sampled_batches
 
     model.train()
     return eval_loss_dict
