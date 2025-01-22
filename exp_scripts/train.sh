@@ -1,6 +1,6 @@
 #PBS -N titok_matryoshka
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml11
+#PBS -l select=1:ncpus=18:mem=145gb:ngpus=3:host=cvml11
 
 config_name='titok_b64_4096_12'
 
@@ -12,7 +12,7 @@ conda activate titok
 
 export PYTHONPATH=$(pwd)
 accelerate launch \
-    --num_machines=1 --num_processes=4 --machine_rank=0 \
+    --num_machines=1 --num_processes=3 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="${config_name}_stage1" \
@@ -27,7 +27,7 @@ accelerate launch \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=True \
     training.per_gpu_batch_size=64 \
-    optimizer.params.learning_rate=1e-4 \
+    optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=100_000 \
     losses.use_self_distilliation=True \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar" \
