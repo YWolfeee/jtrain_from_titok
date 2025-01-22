@@ -933,7 +933,7 @@ def eval_reconstruction(
         
         for i in range(4):
             evaluators[i].update(original_images, images_lists[i].squeeze(2), model_dict["min_encoding_indices"])
-    
+
     model.train()
     return [evaluator.result() for evaluator in evaluators]
 
