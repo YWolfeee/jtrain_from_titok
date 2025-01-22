@@ -11,5 +11,6 @@ wandb/
 .cache/
 slurm*
 output*
-results
+results*
 temp*
+datasets
