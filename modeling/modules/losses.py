@@ -89,11 +89,13 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
         loss_fct = nn.CrossEntropyLoss(reduction="mean")
         batch_size = reconstructions.shape[0]
         if mode == "with_ground_truth":
+            # DEBUG: in this case, target_codes is indices of codebook
             # reconstructions.shape: [batch_size, codebook_size, H, W]
             # target_codes.shape: [batch_size, H * W]
             reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
                                             target_codes.view(batch_size, -1))
         elif mode == "with_self_distilliation":
+            # DEBUG: in this case, target_codes is a probability distribution over the codebook size
             # reconstructions.shape: [batch_size, codebook_size, H, W]
             # target_codes.shape: [batch_size, codebook_size, H, W]
             reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
