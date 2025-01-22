@@ -136,12 +136,14 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # QY: Add regularization for using partial tokens for reconstruction
         if config.model.use_reconstruction_regularization:
             self.use_regularization = True
-            self.regularization_name = config.model.reconstruction_regularization.name
-            self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
             self.max_mask_rate = config.model.reconstruction_regularization.max_mask_rate
         else:
             self.use_regularization = False
             self.max_mask_rate = 0.0
+        
+        # Even for not using regularization, we still set these parameters for evaluation
+        self.regularization_name = config.model.reconstruction_regularization.name
+        self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -213,7 +215,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if isinstance(decode_mask_rate, float):
             decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.device).expand(z_quantized.shape[0])
         # mask rate is a tensor with shape (z_quantized.shape[0],)
-        # values could be identical inside            
+        # values could be identical inside          
         if self.regularization_name == "matryoshka":
             z_quantized = self.matryoshka_masking(z_quantized, mask_rate=decode_mask_rate)
         elif self.regularization_name == "random":
@@ -249,7 +251,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # outside function should ensure that mask_rate is meaningful
         # e.g. belong to [0, 1)
         keep_tokens = torch.ceil(z_quantized.shape[-1] * (1 - mask_rate)).long().to(z_quantized.device)
-
         mask = torch.arange(z_quantized.shape[-1], device=z_quantized.device)[None] < keep_tokens[:, None]
         return torch.where(mask[:, None, None], z_quantized, 0)
     
