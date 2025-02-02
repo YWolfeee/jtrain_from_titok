@@ -215,19 +215,21 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         return mask_rate
     
     def decode(self, z_quantized, decode_mask_rate=0.0):
+        if self.training and not self.use_regularization:
+            # force decode_mask_rate to be 0 during training for training if not using regularization
+            decode_mask_rate = 0.0
         if isinstance(decode_mask_rate, float):
             decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.device).expand(z_quantized.shape[0])
         # mask rate is a tensor with shape (z_quantized.shape[0],)
-        # values could be identical inside            
-        if self.use_regularization:    # positive mask rate:
-            if self.regularization_name == "matryoshka":
-                z_quantized = self.matryoshka_masking(z_quantized, mask_rate=decode_mask_rate)
-            elif self.regularization_name == "random":
-                raise NotImplementedError(
-                    "This training approach has been deprecated.")
-                z_quantized = self.random_masking(z_quantized, mask_rate=decode_mask_rate)
-            else:
-                raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
+        # values could be identical inside
+        if self.regularization_name == "matryoshka":
+            z_quantized = self.matryoshka_masking(z_quantized, mask_rate=decode_mask_rate)
+        elif self.regularization_name == "random":
+            raise NotImplementedError(
+                "This training approach has been deprecated.")
+            z_quantized = self.random_masking(z_quantized, mask_rate=decode_mask_rate)
+        else:
+            raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
         # z_quantized.shape: [batch_size, token_dim, 1, num_tokens]
         decoded = self.decoder(z_quantized)
         if self.finetune_decoder:
