@@ -1,6 +1,6 @@
 #PBS -N titok_matryoshka
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=6:mem=45gb:ngpus=1:host=cvml11
+#PBS -l select=1:ncpus=2:mem=90gb:ngpus=2:host=cvml05
 
 config_name='dry_run'
 
@@ -11,14 +11,14 @@ eval "$(conda shell.bash hook)"
 conda activate titok
 
 export PYTHONPATH=$(pwd)
-WANDB_MODE=offline accelerate launch \
-    --num_machines=1 --num_processes=1 --machine_rank=0 \
+accelerate launch \
+    --num_machines=1 --num_processes=2 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
-    experiment.project="${config_name}_stage1" \
-    experiment.name="${config_name}_stage1_run1" \
-    experiment.output_dir="${config_name}_stage1_run1" \
-    model.use_reconstruction_regularization=True \
+    experiment.project="${config_name}_baseline_stage1" \
+    experiment.name="${config_name}_baseline_stage1_run1" \
+    experiment.output_dir="${config_name}_baseline_stage1_run1" \
+    model.use_reconstruction_regularization=False \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
     model.reconstruction_regularization.max_mask_rate=0.95 \
