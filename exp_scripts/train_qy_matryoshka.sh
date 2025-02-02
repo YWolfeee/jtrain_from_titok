@@ -2,7 +2,7 @@
 #PBS -S /bin/bash
 #PBS -l select=1:ncpus=2:mem=90gb:ngpus=2:host=cvml04
 
-config_name='dry_run'
+config_name='titok_b64_4096_12'
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -29,6 +29,6 @@ accelerate launch \
     training.per_gpu_batch_size=32 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \
-    losses.use_self_distilliation=True \
+    losses.use_self_distilliation=False \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar" \
