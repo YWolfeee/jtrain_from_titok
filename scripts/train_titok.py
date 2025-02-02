@@ -162,7 +162,7 @@ def main():
                             model, ema_model, loss_module,
                             optimizer, discriminator_optimizer,
                             lr_scheduler, discriminator_lr_scheduler,
-                            train_dataloader, eval_dataloader,
+                            train_dataloader, eval_dataloader, train_eval_dataloader,
                             evaluators,
                             global_step,
                             pretrained_tokenizer=pretrained_tokenizer)

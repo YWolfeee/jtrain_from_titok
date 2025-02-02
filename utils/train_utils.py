@@ -331,7 +331,7 @@ def train_one_epoch(config, logger, accelerator,
                     model, ema_model, loss_module,
                     optimizer, discriminator_optimizer,
                     lr_scheduler, discriminator_lr_scheduler,
-                    train_dataloader, eval_dataloader,
+                    train_dataloader, eval_dataloader, train_eval_dataloader,
                     evaluators,
                     global_step,
                     pretrained_tokenizer=None):
@@ -344,7 +344,11 @@ def train_one_epoch(config, logger, accelerator,
 
     autoencoder_logs = defaultdict(float)
     discriminator_logs = defaultdict(float)
-    log_images = None
+    batch = next(iter(train_eval_dataloader))
+    log_images = batch["image"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
+    log_images = log_images[:config.training.num_generated_images]
+    log_fnames = batch["__key__"][:config.training.num_generated_images]
+
     for i, batch in enumerate(train_dataloader):
         model.train()
         if "image" in batch:
@@ -546,9 +550,6 @@ def train_one_epoch(config, logger, accelerator,
                     ema_model.store(model.parameters())
                     ema_model.copy_to(model.parameters())
 
-                if log_images is None:
-                    log_images = images[:config.training.num_generated_images]
-                    log_fnames = fnames[:config.training.num_generated_images]
                 reconstruct_images(
                     model,
                     log_images,
