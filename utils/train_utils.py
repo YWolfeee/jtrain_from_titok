@@ -268,7 +268,8 @@ def create_dataloader(config, logger, accelerator):
         random_flip=preproc_config.random_flip,
     )
     train_dataloader, eval_dataloader = dataset.train_dataloader, dataset.eval_dataloader
-
+    train_eval_dataloader = dataset.train_eval_dataloader
+    
     # potentially, use a pretokenized dataset for speed-up.
     if dataset_config.get("pretokenization", ""):
         train_dataloader = DataLoader(
@@ -278,7 +279,7 @@ def create_dataloader(config, logger, accelerator):
         train_dataloader.num_batches = math.ceil(
             config.experiment.max_train_examples / total_batch_size_without_accum)
     
-    return train_dataloader, eval_dataloader
+    return train_dataloader, eval_dataloader, train_eval_dataloader
 
 
 def create_evaluator(config, logger, accelerator):

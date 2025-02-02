@@ -97,7 +97,7 @@ def main():
     lr_scheduler, _ = create_lr_scheduler(
         config, logger, accelerator, optimizer, discriminator_optimizer=None)
 
-    train_dataloader, _ = create_dataloader(config, logger, accelerator)
+    train_dataloader, _, train_eval_dataloader = create_dataloader(config, logger, accelerator)
 
     # Prepare everything with accelerator.
     logger.info("Preparing model, optimizer and dataloaders")

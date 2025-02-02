@@ -112,7 +112,7 @@ def main():
     lr_scheduler, discriminator_lr_scheduler = create_lr_scheduler(
         config, logger, accelerator, optimizer, discriminator_optimizer)
 
-    train_dataloader, eval_dataloader = create_dataloader(config, logger, accelerator)
+    train_dataloader, eval_dataloader, train_eval_dataloader = create_dataloader(config, logger, accelerator)
 
     # Set up evaluator.
     evaluators = []
