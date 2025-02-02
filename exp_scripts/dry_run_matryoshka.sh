@@ -1,6 +1,8 @@
 #PBS -N titok_matryoshka
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml11
+#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml04
+#PBS -e ~/logs/titok_matryoshka.%j.err
+#PBS -o ~/logs/titok_matryoshka.%j.out
 
 config_name='dry_run'
 
@@ -18,7 +20,7 @@ WANDB_MODE=offline accelerate launch \
     experiment.project="${config_name}_stage1" \
     experiment.name="${config_name}_stage1_run1" \
     experiment.output_dir="${config_name}_stage1_run1" \
-    model.use_reconstruction_regularization=False \
+    model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
     model.reconstruction_regularization.max_mask_rate=0.95 \
