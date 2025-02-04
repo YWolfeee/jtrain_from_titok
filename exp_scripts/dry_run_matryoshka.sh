@@ -1,6 +1,8 @@
 #PBS -N titok_matryoshka
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=6:mem=45gb:ngpus=1:host=cvml11
+#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml04
+#PBS -e ~/logs/titok_matryoshka.%j.err
+#PBS -o ~/logs/titok_matryoshka.%j.out
 
 config_name='dry_run'
 
@@ -26,9 +28,9 @@ WANDB_MODE=offline accelerate launch \
     model.reconstruction_regularization.annealing.time_start=0.0 \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=True \
-    training.per_gpu_batch_size=32 \
+    training.per_gpu_batch_size=16 \
     optimizer.params.learning_rate=4e-4 \
-    training.max_train_steps=250_000 \
-    losses.use_self_distilliation=True \
+    training.max_train_steps=100_000 \
+    losses.use_self_distilliation=False \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar" \

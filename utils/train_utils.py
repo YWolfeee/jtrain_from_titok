@@ -268,7 +268,8 @@ def create_dataloader(config, logger, accelerator):
         random_flip=preproc_config.random_flip,
     )
     train_dataloader, eval_dataloader = dataset.train_dataloader, dataset.eval_dataloader
-
+    train_eval_dataloader = dataset.train_eval_dataloader
+    
     # potentially, use a pretokenized dataset for speed-up.
     if dataset_config.get("pretokenization", ""):
         train_dataloader = DataLoader(
@@ -278,7 +279,7 @@ def create_dataloader(config, logger, accelerator):
         train_dataloader.num_batches = math.ceil(
             config.experiment.max_train_examples / total_batch_size_without_accum)
     
-    return train_dataloader, eval_dataloader
+    return train_dataloader, eval_dataloader, train_eval_dataloader
 
 
 def create_evaluator(config, logger, accelerator):
@@ -330,7 +331,7 @@ def train_one_epoch(config, logger, accelerator,
                     model, ema_model, loss_module,
                     optimizer, discriminator_optimizer,
                     lr_scheduler, discriminator_lr_scheduler,
-                    train_dataloader, eval_dataloader,
+                    train_dataloader, eval_dataloader, train_eval_dataloader,
                     evaluators,
                     global_step,
                     pretrained_tokenizer=None):
@@ -343,7 +344,11 @@ def train_one_epoch(config, logger, accelerator,
 
     autoencoder_logs = defaultdict(float)
     discriminator_logs = defaultdict(float)
-    log_images = None
+    batch = next(iter(train_eval_dataloader))
+    log_images = batch["image"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
+    log_images = log_images[:config.training.num_generated_images]
+    log_fnames = batch["__key__"][:config.training.num_generated_images]
+
     for i, batch in enumerate(train_dataloader):
         model.train()
         if "image" in batch:
@@ -546,9 +551,6 @@ def train_one_epoch(config, logger, accelerator,
                     ema_model.store(model.parameters())
                     ema_model.copy_to(model.parameters())
 
-                if log_images is None:
-                    log_images = images[:config.training.num_generated_images]
-                    log_fnames = fnames[:config.training.num_generated_images]
                 reconstruct_images(
                     model,
                     log_images,
