@@ -11,3 +11,5 @@ output*
 results*
 temp*
 datasets
+*.o*
+*.e*
