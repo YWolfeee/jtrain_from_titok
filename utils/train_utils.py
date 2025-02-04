@@ -419,7 +419,8 @@ def train_one_epoch(config, logger, accelerator,
                 #        we set mode="with_self_distilliation" for distribution, "with_ground_truth" for index
                 autoencoder_loss, loss_dict = loss_module(
                     # DEBUG: The following comment is VERY IMPORTANT
-                    self_distillated_codes, # DEBUG: change this to proxy_codes can work properly (loss can decrease), but self_distilliated_codes will make loss stuck
+                    self_distillated_codes, # DEBUG: change this to proxy_codes can work properly (loss can decrease; YHT: and the loss curve seems to be the same as if distill=False), but self_distilliated_codes will make loss stuck
+                    # proxy_codes,
                     reconstructed_images,
                     extra_results_dict,
                     mode="with_self_distilliation"
