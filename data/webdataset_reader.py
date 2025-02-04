@@ -192,6 +192,24 @@ class SimpleImageDataset:
             persistent_workers=True,
         )
 
+    # Create train_eval dataset and loader. (this is within training dataset but used for evaluation such as reconstruction)
+        pipeline = [
+            wds.SimpleShardList(train_shards_path),
+            wds.split_by_worker,
+            wds.tarfile_to_samples(handler=wds.ignore_and_continue),
+            *test_processing_pipeline,
+            wds.batched(per_gpu_batch_size, partial=True, collation_fn=default_collate),
+        ]
+        self._train_eval_dataset = wds.DataPipeline(*pipeline)
+        self._train_eval_dataloader = wds.WebLoader(
+            self._train_eval_dataset,
+            batch_size=None,
+            shuffle=False,
+            num_workers=num_workers_per_gpu,
+            pin_memory=True,
+            persistent_workers=True,
+        )
+
     @property
     def train_dataset(self):
         return self._train_dataset
@@ -207,6 +225,14 @@ class SimpleImageDataset:
     @property
     def eval_dataloader(self):
         return self._eval_dataloader
+    
+    @property
+    def train_eval_dataset(self):
+        return self._train_eval_dataset
+    
+    @property
+    def train_eval_dataloader(self):
+        return self._train_eval_dataloader
     
 
 class PretoeknizedDataSetJSONL(Dataset):
