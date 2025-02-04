@@ -41,7 +41,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.use_advantage=True \
     model.reconstruction_regularization.policy.rate_weight=0.1 \
     model.reconstruction_regularization.policy.model_type=${model_type} \
-    model.reconstruction_regularization.policy.num_heads=8 \
+    model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     training.per_gpu_batch_size=64 \
