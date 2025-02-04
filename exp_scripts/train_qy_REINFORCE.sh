@@ -1,12 +1,10 @@
 #PBS -N titok_matryoshka
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml04
-#PBS -e ~/logs/titok_matryoshka.%j.err
-#PBS -o ~/logs/titok_matryoshka.%j.out
+#PBS -l select=1:ncpus=2:mem=90gb:ngpus=2:host=cvml04
 
-config_name='dry_run'
-model_type='none'
-tag='matryoshka'
+config_name='titok_b64_4096_12'
+model_type="mlp"
+tag="REINFORCE_${model_type}"
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -15,8 +13,8 @@ eval "$(conda shell.bash hook)"
 conda activate titok
 
 export PYTHONPATH=$(pwd)
-WANDB_MODE=offline accelerate launch \
-    --num_machines=1 --num_processes=1 --machine_rank=0 \
+accelerate launch \
+    --num_machines=1 --num_processes=2 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
@@ -32,15 +30,16 @@ WANDB_MODE=offline accelerate launch \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
     \
-    model.reconstruction_regularization.use_policy=False \
+    model.reconstruction_regularization.use_policy=True \
     model.reconstruction_regularization.policy.use_advantage=True \
     model.reconstruction_regularization.policy.rate_weight=0.1 \
     model.reconstruction_regularization.policy.model_type=${model_type} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
-    training.per_gpu_batch_size=16 \
+    \
+    training.per_gpu_batch_size=32 \
     optimizer.params.learning_rate=4e-4 \
-    training.max_train_steps=100_000 \
+    training.max_train_steps=250_000 \
     losses.use_self_distilliation=False \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar" \

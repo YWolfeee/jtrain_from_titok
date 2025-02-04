@@ -13,4 +13,5 @@ temp*
 datasets
 *.o*
 *.e*
+dry_run*
 .vscode/
