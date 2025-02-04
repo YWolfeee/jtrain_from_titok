@@ -718,3 +718,5 @@ Estimated Total Size (MB): 812.65
 [02/05 01:34:02 TiTok]: Data (t): 0.0127, 38.74/s/gpu Batch (t): 0.8260 LR: 0.000030 Step: 750 Total Loss: 6.8104 Recon Loss: 6.8015 
 [02/05 01:34:43 TiTok]: Data (t): 0.0118, 38.51/s/gpu Batch (t): 0.8311 LR: 0.000032 Step: 800 Total Loss: 6.8242 Recon Loss: 6.8171 
 [02/05 01:35:25 TiTok]: Data (t): 0.0166, 38.56/s/gpu Batch (t): 0.8298 LR: 0.000034 Step: 850 Total Loss: 6.8191 Recon Loss: 6.8052 
+[02/05 01:36:07 TiTok]: Data (t): 0.0011, 39.02/s/gpu Batch (t): 0.8202 LR: 0.000036 Step: 900 Total Loss: 6.8243 Recon Loss: 6.8062 
+[02/05 01:36:49 TiTok]: Data (t): 0.0133, 38.64/s/gpu Batch (t): 0.8282 LR: 0.000038 Step: 950 Total Loss: 6.7840 Recon Loss: 6.7854 
