@@ -24,7 +24,7 @@ import torch.nn as nn
 from collections import OrderedDict
 import einops
 from einops.layers.torch import Rearrange
-
+from einops import rearrange
 
 class ResidualAttentionBlock(nn.Module):
     def __init__(
@@ -380,3 +380,86 @@ class TiTokDecoder(nn.Module):
         x = self.ffn(x.contiguous())
         x = self.conv_out(x)
         return x
+
+class PolicyNet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.image_size = config.dataset.preprocessing.crop_size
+        self.patch_size = config.model.vq_model.vit_dec_patch_size
+        self.grid_size = self.image_size // self.patch_size
+        self.model_size = config.model.vq_model.vit_dec_model_size
+        self.num_latent_tokens = config.model.vq_model.num_latent_tokens
+        self.token_size = config.model.vq_model.token_size
+        self.hidden_size = config.model.use_reconstruction_regularization.use_policy.hidden_size
+
+        self.model_type = config.model.use_reconstruction_regularization.use_policy.model_type
+        assert self.model_type in ["mlp", "transformer", "causal_transformer"], "model_type must be either mlp / transformer / causal_transformer"
+        
+        if self.model_type == "mlp":
+            self.fc1 = nn.Linear(self.token_size, self.hidden_size)
+            self.fc2 = nn.Linear(self.hidden_size, 1)
+
+        elif self.model_type == "transformer":
+            self.num_heads = config.model.use_reconstruction_regularization.use_policy.num_heads
+            self.positional_embedding = nn.Parameter(torch.randn(1, self.num_latent_tokens, self.token_size))
+        
+            # Single-layer transformer
+            self.transformer = nn.TransformerEncoderLayer(
+                d_model=self.token_size,
+                nhead=self.num_heads,
+                dim_feedforward=128,
+                activation="gelu",
+                batch_first=True,
+            )
+            
+            # Logit prediction
+            self.logit_head = nn.Linear(self.token_size, 1)
+
+    def forward(self, z_quantized):
+        if self.model_type == "mlp":
+            z_flattened = rearrange(z_quantized, 'b c h w -> b h w c').contiguous()
+            z_flattened = rearrange(z_flattened, 'b h w c -> (b h w) c') # reshape as (b*h*w, c)
+            x = self.fc1(z_flattened)
+            x = self.fc2(x) # (b*h*w, 1)
+            # reshape back to (b, h*w)
+            logits = x.reshape(z_quantized.shape[0], -1)
+            # apply softmax
+            probs = torch.nn.functional.softmax(x, dim=-1)
+            return x
+        
+        elif self.model_type == "transformer":
+            B, D, _, N = z_quantized.shape
+            z_quantized = z_quantized.squeeze(2).transpose(1, 2)  # [B, N, D]
+            
+            # Add positional embeddings
+            z_quantized = z_quantized + self.positional_embedding
+            
+            # Apply transformer
+            features = self.transformer(z_quantized)  # [B, N, D]
+            
+            # Predict logits
+            logits = self.logit_head(features).squeeze(-1)  # [B, N]
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+            return probs
+        
+        elif self.model_type == "causal_transformer":
+            B, D, _, N = z_quantized.shape
+            z_quantized = z_quantized.squeeze(2).transpose(1, 2)  # [B, N, D]
+            
+            # Add positional embeddings
+            z_quantized = z_quantized + self.positional_embedding
+            
+            # Apply causal transformer
+            causal_mask = torch.triu(torch.ones(N, N), diagonal=1).bool().to(z_quantized.device)
+            features = self.transformer(z_quantized, src_mask=causal_mask)  # [B, N, D]
+            
+            # Predict logits
+            logits = self.logit_head(features).squeeze(-1)  # [B, N]
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+            return probs
+        
+        else:
+            raise ValueError(f"Invalid model type: {self.model_type}")
+        
+        
+        
