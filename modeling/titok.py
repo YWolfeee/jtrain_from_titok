@@ -20,7 +20,7 @@ import torch.nn as nn
 from einops import rearrange
 
 from modeling.modules.base_model import BaseModel
-from modeling.modules.blocks import TiTokEncoder, TiTokDecoder
+from modeling.modules.blocks import TiTokEncoder, TiTokDecoder, PolicyNet
 from modeling.quantizer.quantizer import VectorQuantizer, DiagonalGaussianDistribution
 from modeling.modules.maskgit_vqgan import Encoder as Pixel_Eecoder
 from modeling.modules.maskgit_vqgan import Decoder as Pixel_Decoder
@@ -111,6 +111,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.quantize = DiagonalGaussianDistribution
         else:
             raise NotImplementedError
+
+        if self.config.model.use_reconstruction_regularization.use_policy:
+            self.policy_net = PolicyNet(config)
         
         if self.finetune_decoder:
             # Freeze encoder/quantizer/latent tokens
@@ -220,7 +223,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             decode_mask_rate = 0.0
         if isinstance(decode_mask_rate, float):
             decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.device).expand(z_quantized.shape[0])
-        # mask rate is a tensor with shape (z_quantized.shape[0],)
+        # mask rate is a tensor with shape (batch_size,)
         # values could be identical inside
         if self.regularization_name == "matryoshka":
             z_quantized = self.matryoshka_masking(z_quantized, mask_rate=decode_mask_rate)
@@ -270,7 +273,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             raise ValueError("decode_mask_rate in forward() should be a float")
         
         z_quantized, result_dict = self.encode(x)
-        decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
+        if self.config.model.use_reconstruction_regularization.use_policy:
+            mask_rate_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
+            decode_mask_rate = torch.multinomial(mask_rate_distribution, num_samples=1).squeeze(1) # [batch_size,]
+        else:
+            decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
         decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         # DEBUG: If use self-distill, the decode_mask_rate should be used to determine which part corresponds to ground truth (if some is less than 1/16)
         #        The self-distilliated codes are later used to compute the loss, we detach them to avoid back-propagation on decoder twice
@@ -278,4 +285,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if self.config.losses.use_self_distilliation:
             result_dict["decode_mask_rate"] = decode_mask_rate
             result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16)).detach()
+        # If using policy to estimate optimal mask rate, we need the distribution to compute the loss
+        if self.config.model.use_reconstruction_regularization.use_policy:
+            result_dict["mask_rate_distribution"] = mask_rate_distribution
         return decoded, result_dict
