@@ -13,28 +13,31 @@ pwd
 source ~/.bashrc
 pip install torchinfo
 
-config_name='titok_l256_4096_12'
-ngpus=4
+config_name='titok_b256_4096_12'
+tag="scale_up_lr_by_16"
+ngpus=8
 export PYTHONPATH=$(pwd)
+
+# python -m debugpy --listen 0.0.0.0:5678 --wait-for-client
 accelerate launch \
     --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="temp" \
-    experiment.name="${config_name}_hier" \
-    experiment.output_dir="temp/${config_name}_stage1_run1" \
+    experiment.name="${config_name}_${tag}" \
+    experiment.output_dir="temp/${config_name}_${tag}" \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
     model.reconstruction_regularization.max_mask_rate=0.95 \
-    model.reconstruction_regularization.use_annealing=True \
-    model.reconstruction_regularization.annealing.time_start=0.25 \
-    model.reconstruction_regularization.annealing.time_end=0.75 \
+    model.reconstruction_regularization.use_annealing=False \
+    model.reconstruction_regularization.annealing.time_start=0.0 \
+    model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
     training.per_gpu_batch_size=64 \
-    optimizer.params.learning_rate=2e-4 \
+    optimizer.params.learning_rate=32e-4 \
     training.max_train_steps=250_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
-    losses.use_self_distilliation=False \
+    losses.use_self_distilliation=True \
 
