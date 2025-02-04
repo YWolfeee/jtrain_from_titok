@@ -390,17 +390,17 @@ class PolicyNet(nn.Module):
         self.model_size = config.model.vq_model.vit_dec_model_size
         self.num_latent_tokens = config.model.vq_model.num_latent_tokens
         self.token_size = config.model.vq_model.token_size
-        self.hidden_size = config.model.use_reconstruction_regularization.use_policy.hidden_size
+        self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
 
-        self.model_type = config.model.use_reconstruction_regularization.use_policy.model_type
+        self.model_type = config.model.reconstruction_regularization.policy.model_type
         assert self.model_type in ["mlp", "transformer", "causal_transformer"], "model_type must be either mlp / transformer / causal_transformer"
         
         if self.model_type == "mlp":
             self.fc1 = nn.Linear(self.token_size, self.hidden_size)
             self.fc2 = nn.Linear(self.hidden_size, 1)
 
-        elif self.model_type == "transformer":
-            self.num_heads = config.model.use_reconstruction_regularization.use_policy.num_heads
+        elif self.model_type == "transformer" or self.model_type == "causal_transformer":
+            self.num_heads = config.model.reconstruction_regularization.policy.num_heads
             self.positional_embedding = nn.Parameter(torch.randn(1, self.num_latent_tokens, self.token_size))
         
             # Single-layer transformer
@@ -414,18 +414,23 @@ class PolicyNet(nn.Module):
             
             # Logit prediction
             self.logit_head = nn.Linear(self.token_size, 1)
+        else:
+            raise ValueError(f"Invalid model type: {self.model_type}")
 
     def forward(self, z_quantized):
         if self.model_type == "mlp":
+            B, C, H, W = z_quantized.shape
+            # DEBUG: print("\033[91mCHECK the shape of z_quantized", z_quantized.shape, "\033[0m")
             z_flattened = rearrange(z_quantized, 'b c h w -> b h w c').contiguous()
             z_flattened = rearrange(z_flattened, 'b h w c -> (b h w) c') # reshape as (b*h*w, c)
             x = self.fc1(z_flattened)
             x = self.fc2(x) # (b*h*w, 1)
             # reshape back to (b, h*w)
-            logits = x.reshape(z_quantized.shape[0], -1)
+            logits = x.reshape(B, -1)
+            # DEBUG: print("\033[91mCHECK the shape of logits", logits.shape, "\033[0m")
             # apply softmax
-            probs = torch.nn.functional.softmax(x, dim=-1)
-            return x
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+            return probs
         
         elif self.model_type == "transformer":
             B, D, _, N = z_quantized.shape

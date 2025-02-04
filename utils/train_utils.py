@@ -384,6 +384,13 @@ def train_one_epoch(config, logger, accelerator,
                     global_step,
                     mode="generator",
                 )
+            elif config.model.reconstruction_regularization.use_policy:
+                autoencoder_loss, loss_dict = loss_module(
+                    proxy_codes,
+                    reconstructed_images,
+                    extra_results_dict,
+                    mode="with_policy"
+                )
             elif config.losses.use_self_distilliation:
                 # DEBUG: extra_results_dict should include "decode_mask_rate" and "self_distilliated_codes" in train_titok.py forward()
                 current_decode_mask_rate = extra_results_dict["decode_mask_rate"]
@@ -856,7 +863,7 @@ def eval_loss(
             pretrained_tokenizer.eval()
             proxy_codes = pretrained_tokenizer.encode(images)
         for i, decode_mask_rate in enumerate(decode_mask_rates):
-            reconstructed_images, extra_results_dict = local_model(images, decode_mask_rate=decode_mask_rate)
+            reconstructed_images, extra_results_dict = local_model(images, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
             # compare with ground truth
             if proxy_codes is None:
                 _, loss_dict = loss_module(
@@ -944,7 +951,7 @@ def eval_reconstruction(
         original_images = torch.clone(images)
         original_images = torch.clamp(original_images, 0.0, 1.0)
         for decode_mask_rate in decode_mask_rates:
-            reconstructed_images, model_dict = local_model(images, decode_mask_rate=decode_mask_rate)
+            reconstructed_images, model_dict = local_model(images, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
             if pretrained_tokenizer is not None:
                 reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
             reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)

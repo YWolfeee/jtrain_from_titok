@@ -14,6 +14,7 @@ source ~/.bashrc
 pip install torchinfo
 
 config_name='titok_b256_4096_12'
+model_type="mlp"
 tag="scale_up_lr_by_16"
 ngpus=8
 export PYTHONPATH=$(pwd)
@@ -30,10 +31,19 @@ accelerate launch \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
     model.reconstruction_regularization.max_mask_rate=0.95 \
+    \
     model.reconstruction_regularization.use_annealing=False \
     model.reconstruction_regularization.annealing.time_start=0.0 \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
+    \
+    model.reconstruction_regularization.use_policy=True \
+    model.reconstruction_regularization.policy.use_advantage=True \
+    model.reconstruction_regularization.policy.rate_weight=0.1 \
+    model.reconstruction_regularization.policy.model_type=${model_type} \
+    model.reconstruction_regularization.policy.num_heads=8 \
+    model.reconstruction_regularization.policy.hidden_size=128 \
+    \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=32e-4 \
     training.max_train_steps=250_000 \

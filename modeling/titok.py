@@ -112,7 +112,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             raise NotImplementedError
 
-        if self.config.model.use_reconstruction_regularization.use_policy:
+        if self.config.model.reconstruction_regularization.use_policy:
             self.policy_net = PolicyNet(config)
         
         if self.finetune_decoder:
@@ -122,6 +122,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.encoder.requires_grad_(False)
             self.quantize.eval()
             self.quantize.requires_grad_(False)
+            self.policy_net.eval()
+            self.policy_net.requires_grad_(False)
 
             # Include MaskGiT-VQGAN's quantizer and decoder
             self.pixel_quantize = Pixel_Quantizer(
@@ -268,16 +270,38 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         z_quantized = z_quantized * mask.to(z_quantized.dtype, z_quantized.device)
         return z_quantized
     
-    def forward(self, x, decode_mask_rate=0.0):
+    def forward(self, x, decode_mask_rate=0.0, fixed_mask_rate=False):
         if not isinstance(decode_mask_rate, float):
             raise ValueError("decode_mask_rate in forward() should be a float")
         
+        # Step 1: ENCODE
         z_quantized, result_dict = self.encode(x)
-        if self.config.model.use_reconstruction_regularization.use_policy:
-            mask_rate_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
+
+        # Step 2: MASKING
+        if self.config.model.reconstruction_regularization.use_policy and not fixed_mask_rate:
+            # if using policy, instead of using random mask rate for training, we use the policy to estimate the mask rate
+            if self.finetune_decoder:
+                with torch.no_grad():
+                    mask_rate_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
+            else:
+                mask_rate_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
+            # DEBUG:
+            # print("\033[91mCHECK the shape", mask_rate_distribution.shape, "\033[0m")
+            # print("\033[91mCHECK for negative values", torch.any(mask_rate_distribution < 0), "\033[0m")
+            # print("\033[91mCHECK for nan values", torch.any(mask_rate_distribution != mask_rate_distribution), "\033[0m")
+            # print("\033[91mCHECK for inf values", torch.any(mask_rate_distribution == float('inf')), "\033[0m")
+
             decode_mask_rate = torch.multinomial(mask_rate_distribution, num_samples=1).squeeze(1) # [batch_size,]
+            prob_of_current_mask_rate = mask_rate_distribution[torch.arange(mask_rate_distribution.shape[0]), decode_mask_rate]
+            decode_mask_rate = decode_mask_rate / self.num_latent_tokens
+            
+            # If using policy to estimate optimal mask rate, we need the distribution to compute the loss
+            result_dict["sampled_mask_rate"] = decode_mask_rate
+            result_dict["prob_of_sampled_mask_rate"] = prob_of_current_mask_rate
         else:
             decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
+        
+        # STEP 3: DECODE
         decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         # DEBUG: If use self-distill, the decode_mask_rate should be used to determine which part corresponds to ground truth (if some is less than 1/16)
         #        The self-distilliated codes are later used to compute the loss, we detach them to avoid back-propagation on decoder twice
@@ -285,7 +309,4 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if self.config.losses.use_self_distilliation:
             result_dict["decode_mask_rate"] = decode_mask_rate
             result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16)).detach()
-        # If using policy to estimate optimal mask rate, we need the distribution to compute the loss
-        if self.config.model.use_reconstruction_regularization.use_policy:
-            result_dict["mask_rate_distribution"] = mask_rate_distribution
         return decoded, result_dict

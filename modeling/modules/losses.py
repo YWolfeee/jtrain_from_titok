@@ -68,7 +68,9 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
     ):
         super().__init__()
         loss_config = config.losses
+        self.config = config
         self.quantizer_weight = loss_config.quantizer_weight
+        self.rate_weight = config.model.reconstruction_regularization.policy.rate_weight
         self.target_codebook_size = 1024
 
     def forward(self,
@@ -82,10 +84,48 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
     def _forward_generator(self,
                            target_codes: torch.Tensor,
                            reconstructions: torch.Tensor,
-                           quantizer_loss: Mapping[Text, torch.Tensor],
+                           extra_input_dict: Mapping[Text, torch.Tensor],
                            mode: str = "with_ground_truth"
                            ) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
         reconstructions = reconstructions.contiguous()
+        if mode == "with_policy":
+            # TODO: CHECK REINFORCE: [critic loss] and [actor loss] should be separated
+            loss_fct = nn.CrossEntropyLoss(reduction="none")
+            batch_size = reconstructions.shape[0]
+            
+            distortion_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
+                            target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
+            rate_loss = extra_input_dict["sampled_mask_rate"] # [B,]
+            print("\033[91mCHECK rate loss", rate_loss, "\033[0m")
+            print("\033[91mCHECK the shape of rate_loss", rate_loss.shape, "\033[0m")
+            print("\033[91mCHECK the shape of distortion_loss", distortion_loss.shape, "\033[0m")
+            
+            critic_loss = distortion_loss + self.rate_weight * rate_loss
+            if self.config.model.reconstruction_regularization.policy.use_advantage:
+                reward = critic_loss - torch.mean(critic_loss) + self.rate_weight * (rate_loss - torch.mean(rate_loss))
+                reward = reward.detach()
+            else:
+                reward = critic_loss.detach()
+            actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
+            critic_loss = critic_loss.mean()
+            actor_loss = actor_loss.mean()
+            
+            total_loss = critic_loss + actor_loss + \
+            self.quantizer_weight * extra_input_dict["quantizer_loss"]
+
+            loss_dict = dict(
+                total_loss=total_loss.clone().detach(),
+                reconstruction_loss=distortion_loss.mean().detach(),
+                rate_loss=rate_loss.mean().detach(),
+                actor_loss=actor_loss.detach(),
+                critic_loss=critic_loss.detach(),
+                quantizer_loss=(self.quantizer_weight * extra_input_dict["quantizer_loss"]).detach(),
+                commitment_loss=extra_input_dict["commitment_loss"].detach(),
+                codebook_loss=extra_input_dict["codebook_loss"].detach(),
+            )
+
+            return total_loss, loss_dict
+        
         loss_fct = nn.CrossEntropyLoss(reduction="mean")
         batch_size = reconstructions.shape[0]
         if mode == "with_ground_truth":
@@ -103,14 +143,14 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
         else:
             raise ValueError(f"Unsupported loss mode {mode}")
         total_loss = reconstruction_loss + \
-            self.quantizer_weight * quantizer_loss["quantizer_loss"]
+            self.quantizer_weight * extra_input_dict["quantizer_loss"]
 
         loss_dict = dict(
             total_loss=total_loss.clone().detach(),
             reconstruction_loss=reconstruction_loss.detach(),
-            quantizer_loss=(self.quantizer_weight * quantizer_loss["quantizer_loss"]).detach(),
-            commitment_loss=quantizer_loss["commitment_loss"].detach(),
-            codebook_loss=quantizer_loss["codebook_loss"].detach(),
+            quantizer_loss=(self.quantizer_weight * extra_input_dict["quantizer_loss"]).detach(),
+            commitment_loss=extra_input_dict["commitment_loss"].detach(),
+            codebook_loss=extra_input_dict["codebook_loss"].detach(),
         )
 
         return total_loss, loss_dict
