@@ -26,6 +26,7 @@ from modeling.modules.maskgit_vqgan import Encoder as Pixel_Eecoder
 from modeling.modules.maskgit_vqgan import Decoder as Pixel_Decoder
 from modeling.modules.maskgit_vqgan import VectorQuantizer as Pixel_Quantizer
 import json
+import math
 from omegaconf import OmegaConf
 from pathlib import Path
 
@@ -149,6 +150,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # Even for not using regularization, we still set these parameters for evaluation
         self.regularization_name = config.model.reconstruction_regularization.name
         self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
+
+        try:
+            tmp = config.model.reconstruction_regularization.policy.annealing
+            self.policy_annealing = tmp if tmp.use_annealing else None
+        except:
+            self.policy_annealing = None
+        self.set_policy_annealing_factor(0, config.training.max_train_steps)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -179,8 +187,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
     def set_max_mask_rate(self, max_mask_rate):
         self.max_mask_rate = max_mask_rate
 
-    def set_annealing_factor(self, annealing_factor):
-        self.annealing_factor = annealing_factor
+    def set_policy_annealing_factor(self, global_step: int, max_train_steps: int):
+        if self.policy_annealing is None:
+            self.annealing_factor = 1.0
+        else:
+            alpha_end = self.policy_annealing.alpha_end # 1
+            alpha_start = self.policy_annealing.alpha_start # 0
+            self.annealing_factor = alpha_start + (alpha_end - alpha_start) * (math.sin(0.5 * math.pi * global_step / max_train_steps) ** 2)
 
     def encode(self, x, drop_p=0.0):
         if self.finetune_decoder:
@@ -301,11 +314,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             # If using policy to estimate optimal mask rate, we need the distribution to compute the loss
             result_dict["sampled_mask_rate"] = decode_mask_rate
             result_dict["prob_of_sampled_mask_rate"] = prob_of_current_mask_rate
+            result_dict["annealing_factor"] = self.annealing_factor
 
-            if self.config.model.reconstruction_regularization.policy.use_annealing:
-                result_dict["annealing_factor"] = self.annealing_factor
-            else:
-                result_dict["annealing_factor"] = 1.0
         else:
             decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
         

@@ -114,6 +114,8 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 total_loss=total_loss.clone().detach(),
                 reconstruction_loss=distortion_loss.mean().detach(),
                 rate_loss=rate_loss.mean().detach(),
+                rate_std=rate_loss.std().detach(),  # sample wise variance
+                prob_mean=extra_input_dict["prob_of_sampled_mask_rate"].mean().detach(),
                 actor_loss=actor_loss.detach(),
                 critic_loss=critic_loss.detach(),
                 quantizer_loss=(self.quantizer_weight * extra_input_dict["quantizer_loss"]).detach(),
