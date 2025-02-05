@@ -3,7 +3,6 @@
 # This bash file is used for the proposed new loss that
 # explicitly trade-off between distortion and rate.
 # We fix previous use_annealing, use_distill, is_increasing to False
-#
 
 ###
 
@@ -11,6 +10,9 @@ config_name=$1 # 'titok_l256_4096_12'
 per_gpu_batch_size=$2 # 64
 lr=$3 # 2e-4
 use_reconstruction_regularization=$4 # True
+use_policy_annealing=$5
+rate_weight=$6
+policy_network=$7
 output_root=$8
 job_name=$9         # Use as output dir
 
@@ -26,7 +28,7 @@ accelerate launch \
     --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
-    experiment.project="try_hierarchical_loss" \
+    experiment.project="try_distortion_rate_tradeoff_loss" \
     experiment.name="${job_name}" \
     experiment.output_dir="${output_root}/${job_name}" \
     model.use_reconstruction_regularization=${use_reconstruction_regularization} \
@@ -36,6 +38,18 @@ accelerate launch \
     model.reconstruction_regularization.use_annealing=False \
     model.reconstruction_regularization.annealing.is_increasing=False \
     losses.use_self_distilliation=False \
+    \
+    model.reconstruction_regularization.use_policy=True \
+    model.reconstruction_regularization.policy.use_advantage=True \
+    model.reconstruction_regularization.policy.rate_weight=${rate_weight} \
+    model.reconstruction_regularization.policy.model_type=${policy_network} \
+    model.reconstruction_regularization.policy.num_heads=4 \
+    model.reconstruction_regularization.policy.hidden_size=128 \
+    \
+    model.reconstruction_regularization.policy.annealing.use_annealing=${use_policy_annealing} \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
+    \
     training.per_gpu_batch_size=${per_gpu_batch_size} \
     optimizer.params.learning_rate=${lr} \
     training.max_train_steps=250_000 \
