@@ -373,9 +373,8 @@ def train_one_epoch(config, logger, accelerator,
             max_mask_rate = get_titok_max_mask_rate(config, global_step)
             accelerator.unwrap_model(model).set_max_mask_rate(max_mask_rate)
 
-        if config.model.reconstruction_regularization.policy.use_annealing:
-            annealing_factor = get_titok_annealing_factor(config, global_step)
-            accelerator.unwrap_model(model).set_annealing_factor(annealing_factor)
+        accelerator.unwrap_model(model).set_policy_annealing_factor(
+            global_step, config.training.max_train_steps)
 
         with accelerator.accumulate([model, loss_module]):
             reconstructed_images, extra_results_dict = model(images)
@@ -668,11 +667,11 @@ def get_titok_max_mask_rate(config, global_step):
     else:
         return alpha * end_mask_rate + (1 - alpha) * start_mask_rate
     
-def get_titok_annealing_factor(config, global_step):
-    annealing = config.model.reconstruction_regularization.policy.annealing
-    alpha_end = annealing.alpha_end # 1
-    alpha_start = annealing.alpha_start # 0
-    return alpha_start + 0.5 * (alpha_end - alpha_start) * (1 + math.cos(math.pi * global_step / config.training.max_train_steps))
+# def get_titok_annealing_factor(config, global_step):
+#     annealing = config.model.reconstruction_regularization.policy.annealing
+#     alpha_end = annealing.alpha_end # 1
+#     alpha_start = annealing.alpha_start # 0
+#     return alpha_start + 0.5 * (alpha_end - alpha_start) * (1 + math.cos(math.pi * global_step / config.training.max_train_steps))
 
 def get_rar_random_ratio(config, cur_step):
     randomness_anneal_start = config.model.generator.randomness_anneal_start
@@ -896,32 +895,32 @@ def eval_loss(
             else:
                 eval_loss_dict[current_key] += accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
 
-            if i >= 1:
-                if proxy_codes is None:
-                    _, loss_dict = loss_module(
-                        previous_reconstructed_images,
-                        reconstructed_images,
-                        extra_results_dict,
-                        0, # ignore effect of global_step in this step
-                        mode="generator",
-                    )
-                else:
-                    previous_reconstructed_images = previous_reconstructed_images.contiguous()
-                    previous_reconstructed_images = previous_reconstructed_images.view(previous_reconstructed_images.shape[0], 1024, -1)
-                    previous_reconstructed_images = previous_reconstructed_images.softmax(dim=1)
-                    _, loss_dict = loss_module(
-                        previous_reconstructed_images,
-                        reconstructed_images,
-                        extra_results_dict,
-                        mode="with_self_distilliation"
-                    )
-                current_key = f"{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens"
-                if current_key not in eval_loss_dict:
-                    eval_loss_dict[current_key] = accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
-                else:
-                    eval_loss_dict[current_key] += accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
+            # if i >= 1:
+            #     if proxy_codes is None:
+            #         _, loss_dict = loss_module(
+            #             previous_reconstructed_images,
+            #             reconstructed_images,
+            #             extra_results_dict,
+            #             0, # ignore effect of global_step in this step
+            #             mode="generator",
+            #         )
+            #     else:
+            #         previous_reconstructed_images = previous_reconstructed_images.contiguous()
+            #         previous_reconstructed_images = previous_reconstructed_images.view(previous_reconstructed_images.shape[0], 1024, -1)
+            #         previous_reconstructed_images = previous_reconstructed_images.softmax(dim=1)
+            #         _, loss_dict = loss_module(
+            #             previous_reconstructed_images,
+            #             reconstructed_images,
+            #             extra_results_dict,
+            #             mode="with_self_distilliation"
+            #         )
+            #     current_key = f"{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens"
+            #     if current_key not in eval_loss_dict:
+            #         eval_loss_dict[current_key] = accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
+            #     else:
+            #         eval_loss_dict[current_key] += accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
             
-            previous_reconstructed_images = reconstructed_images
+            # previous_reconstructed_images = reconstructed_images
         t += 1
 
     for k, v in eval_loss_dict.items():

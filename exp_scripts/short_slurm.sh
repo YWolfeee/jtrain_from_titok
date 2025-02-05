@@ -15,7 +15,7 @@ pip install torchinfo
 
 config_name='titok_b256_4096_12'
 model_type="mlp"
-tag="tradeoff_with_correct_loss"
+tag="tradeoff_with_correct_loss_check_annealing"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -39,14 +39,14 @@ accelerate launch \
     \
     model.reconstruction_regularization.use_policy=True \
     model.reconstruction_regularization.policy.use_advantage=True \
-    model.reconstruction_regularization.policy.rate_weight=1 \
+    model.reconstruction_regularization.policy.rate_weight=0.1 \
     model.reconstruction_regularization.policy.model_type=${model_type} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     model.reconstruction_regularization.policy.annealing.use_annealing=True \
-    model.reconstruction_regularization.policy.annealing.beta_start=0.0 \
-    model.reconstruction_regularization.policy.annealing.beta_end=1.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
