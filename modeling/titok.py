@@ -152,6 +152,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
 
         try:
+            tmp = config.model.reconstruction_regularization.use_policy
+            self.use_policy = tmp
+        except:
+            self.use_policy = False
+
+        try:
             tmp = config.model.reconstruction_regularization.policy.annealing
             self.policy_annealing = tmp if tmp.use_annealing else None
         except:

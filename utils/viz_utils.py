@@ -66,7 +66,8 @@ from einops import rearrange
 
 def make_viz_from_samples(
     original_images,
-    reconstructed_images_list
+    reconstructed_images_list,
+    vis_dict
 ):
     """Generates visualization images from original images and reconstructed images.
 
@@ -83,8 +84,9 @@ def make_viz_from_samples(
     original_images = original_images.cpu()
 
     # Create annotations for both rows
-    annotations_row1 = ["GT"] + [f"{(1 - i/16)*100:.1f}%" for i in range(len(reconstructed_images_list))]
-    annotations_row2 = ["GT"] + ["Diff"] * len(reconstructed_images_list)
+    check_length = len(reconstructed_images_list) if "policy_mask_rate" not in vis_dict else len(reconstructed_images_list) - 1
+    annotations_row1 = ["GT"] + [f"{(1 - i/16)*100:.1f}%" for i in range(check_length)]
+    annotations_row2 = ["GT"] + ["Diff"] * check_length
     font_size = 24  # Increased from 12 to 24
     annotation_height = 40  # Increased from 20 to 40 to accommodate larger font
     
@@ -127,6 +129,13 @@ def make_viz_from_samples(
     for i, reconstructed_images in enumerate(reconstructed_images_list):
         reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0) * 255.0
         reconstructed_images = reconstructed_images.cpu()
+        if "policy_mask_rate" in vis_dict and i == len(reconstructed_images_list) - 1:
+            mask_rate = vis_dict["policy_mask_rate"] # [B,1]
+            mask_rate = mask_rate.cpu()
+            mask_rate = mask_rate.numpy()
+            mask_rate = 1 - mask_rate
+            policy_mask_rate = mask_rate * 100
+            diff_img = torch.abs(reconstructed_images - original_images)
         diff_img = torch.abs(reconstructed_images - prev_images)
         prev_images = reconstructed_images
         start_x = (i + 1) * img_width
@@ -147,12 +156,19 @@ def make_viz_from_samples(
         for i, text in enumerate(annotations_row1):
             x = i * img_width + img_width//2 - len(text)*font_size//4
             draw.text((x, 4), text, fill="black", font=font)  # Adjusted y position from 2 to 4
-            
+        if "policy_mask_rate" in vis_dict:
+            text = f"Policy:{policy_mask_rate[batch_idx]:.1f}%"
+            x = len(annotations_row1) * img_width + img_width//2 - len(text)*font_size//4
+            draw.text((x, 4), text, fill="black", font=font)
         # Add annotations for second row
         for i, text in enumerate(annotations_row2):
             x = i * img_width + img_width//2 - len(text)*font_size//4
             y = img_height + annotation_height + 4  # Adjusted from 2 to 4
             draw.text((x, y), text, fill="black", font=font)
+        if "policy_mask_rate" in vis_dict:
+            x = len(annotations_row1) * img_width + img_width//2 - len(text)*font_size//4
+            y = img_height + annotation_height + 4  # Adjusted from 2 to 4
+            draw.text((x, y), "Diff w/Original", fill="black", font=font)
             
         images_for_saving.append(img_pil)
 
