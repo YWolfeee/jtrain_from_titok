@@ -304,18 +304,18 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             # if using policy, instead of using random mask rate for training, we use the policy to estimate the mask rate
             if self.finetune_decoder:
                 with torch.no_grad():
-                    action_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
+                    num_used_tokens_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
             else:
-                action_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
+                num_used_tokens_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
             # DEBUG:
             # print("\033[91mCHECK the shape", mask_rate_distribution.shape, "\033[0m")
             # print("\033[91mCHECK for negative values", torch.any(mask_rate_distribution < 0), "\033[0m")
             # print("\033[91mCHECK for nan values", torch.any(mask_rate_distribution != mask_rate_distribution), "\033[0m")
             # print("\033[91mCHECK for inf values", torch.any(mask_rate_distribution == float('inf')), "\033[0m")
 
-            sampled_num_used_tokens = torch.multinomial(action_distribution, num_samples=1).squeeze(1) # [batch_size,]
-            prob_of_current_mask_rate = action_distribution[torch.arange(action_distribution.shape[0]), sampled_num_used_tokens]
-            sampled_mask_rate = 1 - sampled_num_used_tokens / self.num_latent_tokens
+            sampled_num_used_tokens = torch.multinomial(num_used_tokens_distribution, num_samples=1).squeeze(1) # [batch_size,]
+            prob_of_current_mask_rate = num_used_tokens_distribution[torch.arange(num_used_tokens_distribution.shape[0]), sampled_num_used_tokens]
+            sampled_mask_rate = 1 - sampled_num_used_tokens / self.num_latent_tokens # QY: the distribution is not for mask rate, but for used rate, we need to convert it back to mask rate
             
             # If using policy to estimate optimal mask rate, we need the distribution to compute the loss
             result_dict["sampled_mask_rate"] = sampled_mask_rate
