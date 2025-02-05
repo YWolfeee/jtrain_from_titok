@@ -41,13 +41,13 @@
 config_name=$1      # name of the `yaml` to call, 'titok_l256_4096_12'
 per_gpu_batch_size=$2 # 64
 learning_rate=$3 # 2e-4
-use_reconstruction_regularization=$4         # use_reconstruction_regularization True
-use_annealing=$5    # False
-is_increasing=$6    # False
-use_self_distilliation=$7
+use_reconstruction_regularization=$4         # True
+use_policy_annealing=$5    # False
+rate_weight=$6    # False
+policy_network=$7
 output_root=$8      
 
-echo "Running config: $config_name; batch_size: ${per_gpu_batch_size}; learning_rate: ${learning_rate}; user_reconstruction_regularization: ${use_reconstruction_regularization}; use_annealing: ${use_annealing}; is_increasing: ${is_increasing}; use_self_distilliation: ${use_self_distilliation}; output_root: ${output_root}."
+echo "Running config: $config_name; batch_size: ${per_gpu_batch_size}; learning_rate: ${learning_rate}; user_reconstruction_regularization: ${use_reconstruction_regularization}; use_policy_annealing: ${use_policy_annealing}; rate_weight: ${rate_weight}; policy_network: ${policy_network}; output_root: ${output_root}."
 
 
 # Enable strict error handling to improve script reliability.
@@ -202,7 +202,8 @@ function launch_more_jobs() {
     fi
     log_msg "Launching ${num_jobs_to_launch} jobs..."
  
-    command="sbatch --job-name=${SLURM_JOB_NAME} --output='${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out' exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing $use_self_distilliation $output_root"
+    command="sbatch --job-name=${SLURM_JOB_NAME} --output='${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out' exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_policy_annealing $rate_weight $policy_network $output_root"
+    # command="sbatch --job-name=${SLURM_JOB_NAME} --output='${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out' exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing $use_self_distilliation $output_root"
     echo "$command"
     for ((i = 1; i <= ${num_jobs_to_launch}; i++)); do
     log_msg "[JobId=${SLURM_JOB_ID}] Launching next job..."
@@ -250,17 +251,8 @@ function do_actual_work() {
     # enroot list -f
     # pwd
     enroot start --rw --mount /lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training my_workspace \
-        /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing $use_self_distilliation ${output_root} ${SLURM_JOB_NAME}
-        # /bin/bash -c "source ~/.bashrc; pip show torchinfo; which accelerate; cd /joint_training/jtrain_from_titok; export PYTHONPATH='/joint_training/jtrain_from_titok'; \
-        # accelerate launch \
-        # --num_machines=1 --num_processes=4 --machine_rank=0 \
-        # --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
-        # scripts/train_titok.py config=configs/training/stage1/titok_s128_matryoshka_annealing.yaml \
-        # experiment.project='${EXP_RUN_NAME}' \
-        # experiment.name='${EXP_RUN_NAME}_run1' \
-        # experiment.output_dir='${EXP_RUN_NAME}_run1' \
-        # training.per_gpu_batch_size=32 
-        # "
+        /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_policy_annealing $rate_weight $policy_network ${output_root} ${SLURM_JOB_NAME}
+        # /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing $use_self_distilliation ${output_root} ${SLURM_JOB_NAME}
  
     # Simulate a coin toss: generate a random number
     toss=$((RANDOM % 10))
