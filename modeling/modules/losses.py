@@ -107,7 +107,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
             critic_loss = critic_loss.mean()
             actor_loss = actor_loss.mean()
             
-            total_loss = critic_loss + actor_loss + \
+            total_loss = critic_loss + extra_input_dict["annealing_factor"] * actor_loss + \
             self.quantizer_weight * extra_input_dict["quantizer_loss"]
 
             loss_dict = dict(

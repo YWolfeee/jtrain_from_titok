@@ -373,6 +373,10 @@ def train_one_epoch(config, logger, accelerator,
             max_mask_rate = get_titok_max_mask_rate(config, global_step)
             accelerator.unwrap_model(model).set_max_mask_rate(max_mask_rate)
 
+        if config.model.reconstruction_regularization.policy.use_annealing:
+            annealing_factor = get_titok_annealing_factor(config, global_step)
+            accelerator.unwrap_model(model).set_annealing_factor(annealing_factor)
+
         with accelerator.accumulate([model, loss_module]):
             reconstructed_images, extra_results_dict = model(images)
             # reconstructed_images.shape: [batch_size, 1024, H, W]
@@ -663,6 +667,12 @@ def get_titok_max_mask_rate(config, global_step):
         return end_mask_rate
     else:
         return alpha * end_mask_rate + (1 - alpha) * start_mask_rate
+    
+def get_titok_annealing_factor(config, global_step):
+    annealing = config.model.reconstruction_regularization.policy.annealing
+    alpha_end = annealing.alpha_end # 1
+    alpha_start = annealing.alpha_start # 0
+    return alpha_start + 0.5 * (alpha_end - alpha_start) * (1 + math.cos(math.pi * global_step / config.training.max_train_steps))
 
 def get_rar_random_ratio(config, cur_step):
     randomness_anneal_start = config.model.generator.randomness_anneal_start
