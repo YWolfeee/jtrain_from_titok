@@ -998,9 +998,20 @@ def reconstruct_images(model, original_images, fnames, accelerator,
         if pretrained_tokenizer is not None:
             reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
         reconstructed_images_list.append(reconstructed_images)
+
+    vis_dict = {}
+    if model.use_policy:
+        reconstructed_images, extra_results_dict = accelerator.unwrap_model(model).forward(original_images)
+        if pretrained_tokenizer is not None:
+            reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+        reconstructed_images_list.append(reconstructed_images)
+        policy_mask_rate = extra_results_dict["sampled_mask_rate"]
+        vis_dict["policy_mask_rate"] = policy_mask_rate
+    
     images_for_saving, images_for_logging = make_viz_from_samples(
         original_images,
-        reconstructed_images_list
+        reconstructed_images_list,
+        vis_dict=vis_dict
     )
     # Log images.
     if config.training.enable_wandb:
