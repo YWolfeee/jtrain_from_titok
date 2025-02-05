@@ -95,14 +95,11 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
             
             distortion_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
                             target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
-            rate_loss = extra_input_dict["sampled_mask_rate"] # [B,]
-            print("\033[91mCHECK rate loss", rate_loss, "\033[0m")
-            print("\033[91mCHECK the shape of rate_loss", rate_loss.shape, "\033[0m")
-            print("\033[91mCHECK the shape of distortion_loss", distortion_loss.shape, "\033[0m")
+            rate_loss = 1 - extra_input_dict["sampled_mask_rate"] # [B,]
             
             critic_loss = distortion_loss + self.rate_weight * rate_loss
             if self.config.model.reconstruction_regularization.policy.use_advantage:
-                reward = critic_loss - torch.mean(critic_loss) + self.rate_weight * (rate_loss - torch.mean(rate_loss))
+                reward = critic_loss - torch.mean(critic_loss)
                 reward = reward.detach()
             else:
                 reward = critic_loss.detach()
