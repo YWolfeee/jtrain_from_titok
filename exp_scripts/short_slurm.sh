@@ -44,6 +44,10 @@ accelerate launch \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
+    model.reconstruction_regularization.policy.annealing.use_annealing=True \
+    model.reconstruction_regularization.policy.annealing.beta_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.beta_end=1.0 \
+    \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \

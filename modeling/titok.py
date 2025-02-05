@@ -179,6 +179,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
     def set_max_mask_rate(self, max_mask_rate):
         self.max_mask_rate = max_mask_rate
 
+    def set_annealing_factor(self, annealing_factor):
+        self.annealing_factor = annealing_factor
+
     def encode(self, x, drop_p=0.0):
         if self.finetune_decoder:
             with torch.no_grad():
@@ -298,6 +301,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             # If using policy to estimate optimal mask rate, we need the distribution to compute the loss
             result_dict["sampled_mask_rate"] = decode_mask_rate
             result_dict["prob_of_sampled_mask_rate"] = prob_of_current_mask_rate
+
+            if self.config.model.reconstruction_regularization.policy.use_annealing:
+                result_dict["annealing_factor"] = self.annealing_factor
+            else:
+                result_dict["annealing_factor"] = 1.0
         else:
             decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
         
