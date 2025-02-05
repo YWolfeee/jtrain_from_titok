@@ -304,33 +304,33 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             # if using policy, instead of using random mask rate for training, we use the policy to estimate the mask rate
             if self.finetune_decoder:
                 with torch.no_grad():
-                    mask_rate_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
+                    action_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
             else:
-                mask_rate_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
+                action_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
             # DEBUG:
             # print("\033[91mCHECK the shape", mask_rate_distribution.shape, "\033[0m")
             # print("\033[91mCHECK for negative values", torch.any(mask_rate_distribution < 0), "\033[0m")
             # print("\033[91mCHECK for nan values", torch.any(mask_rate_distribution != mask_rate_distribution), "\033[0m")
             # print("\033[91mCHECK for inf values", torch.any(mask_rate_distribution == float('inf')), "\033[0m")
 
-            decode_mask_rate = torch.multinomial(mask_rate_distribution, num_samples=1).squeeze(1) # [batch_size,]
-            prob_of_current_mask_rate = mask_rate_distribution[torch.arange(mask_rate_distribution.shape[0]), decode_mask_rate]
-            decode_mask_rate = decode_mask_rate / self.num_latent_tokens
+            sampled_num_used_tokens = torch.multinomial(action_distribution, num_samples=1).squeeze(1) # [batch_size,]
+            prob_of_current_mask_rate = action_distribution[torch.arange(action_distribution.shape[0]), sampled_num_used_tokens]
+            sampled_mask_rate = 1 - sampled_num_used_tokens / self.num_latent_tokens
             
             # If using policy to estimate optimal mask rate, we need the distribution to compute the loss
-            result_dict["sampled_mask_rate"] = decode_mask_rate
+            result_dict["sampled_mask_rate"] = sampled_mask_rate
             result_dict["prob_of_sampled_mask_rate"] = prob_of_current_mask_rate
             result_dict["annealing_factor"] = self.annealing_factor
 
         else:
-            decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
+            sampled_mask_rate= self.get_mask_rate(z_quantized, decode_mask_rate)
         
         # STEP 3: DECODE
-        decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
+        decoded = self.decode(z_quantized, decode_mask_rate=sampled_mask_rate)
         # DEBUG: If use self-distill, the decode_mask_rate should be used to determine which part corresponds to ground truth (if some is less than 1/16)
         #        The self-distilliated codes are later used to compute the loss, we detach them to avoid back-propagation on decoder twice
         #        The decode_mask_rate is correct in dry_run
         if self.config.losses.use_self_distilliation:
-            result_dict["decode_mask_rate"] = decode_mask_rate
-            result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(decode_mask_rate), decode_mask_rate - 1/16)).detach()
+            result_dict["decode_mask_rate"] = sampled_mask_rate
+            result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(sampled_mask_rate), sampled_mask_rate - 1/16)).detach()
         return decoded, result_dict

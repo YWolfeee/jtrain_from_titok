@@ -45,8 +45,8 @@ accelerate launch \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     model.reconstruction_regularization.policy.annealing.use_annealing=True \
-    model.reconstruction_regularization.policy.annealing.beta_start=0.0 \
-    model.reconstruction_regularization.policy.annealing.beta_end=1.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
     training.per_gpu_batch_size=32 \
     optimizer.params.learning_rate=4e-4 \
