@@ -279,6 +279,7 @@ class TiTokEncoder(nn.Module):
         
         latent_tokens = x[:, 1+self.grid_size**2:]
         latent_tokens = self.ln_post(latent_tokens)
+        latent_embeddings = latent_tokens.clone()
         # fake 2D shape
         if self.is_legacy:
             latent_tokens = latent_tokens.reshape(batch_size, self.width, self.num_latent_tokens, 1)
@@ -287,7 +288,7 @@ class TiTokEncoder(nn.Module):
             latent_tokens = latent_tokens.reshape(batch_size, self.num_latent_tokens, self.width, 1).permute(0, 2, 1, 3)
         latent_tokens = self.conv_out(latent_tokens)
         latent_tokens = latent_tokens.reshape(batch_size, self.token_size, 1, self.num_latent_tokens)
-        return latent_tokens
+        return latent_tokens, latent_embeddings
     
 
 class TiTokDecoder(nn.Module):
@@ -382,30 +383,30 @@ class TiTokDecoder(nn.Module):
         return x
 
 class PolicyNet(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, in_channels: int):
         super().__init__()
         self.image_size = config.dataset.preprocessing.crop_size
         self.patch_size = config.model.vq_model.vit_dec_patch_size
         self.grid_size = self.image_size // self.patch_size
         self.model_size = config.model.vq_model.vit_dec_model_size
         self.num_latent_tokens = config.model.vq_model.num_latent_tokens
-        self.token_size = config.model.vq_model.token_size
+        self.in_channels = in_channels
         self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
 
         self.model_type = config.model.reconstruction_regularization.policy.model_type
         assert self.model_type in ["mlp", "transformer", "causal_transformer"], "model_type must be either mlp / transformer / causal_transformer"
         
         if self.model_type == "mlp":
-            self.fc1 = nn.Linear(self.token_size, self.hidden_size)
+            self.fc1 = nn.Linear(self.in_channels, self.hidden_size)
             self.fc2 = nn.Linear(self.hidden_size, 1)
 
         elif self.model_type == "transformer" or self.model_type == "causal_transformer":
             self.num_heads = config.model.reconstruction_regularization.policy.num_heads
-            self.positional_embedding = nn.Parameter(torch.randn(1, self.num_latent_tokens, self.token_size))
+            self.positional_embedding = nn.Parameter(torch.randn(1, self.num_latent_tokens, self.in_channels))
         
             # Single-layer transformer
             self.transformer = nn.TransformerEncoderLayer(
-                d_model=self.token_size,
+                d_model=self.in_channels,
                 nhead=self.num_heads,
                 dim_feedforward=128,
                 activation="gelu",
@@ -413,19 +414,20 @@ class PolicyNet(nn.Module):
             )
             
             # Logit prediction
-            self.logit_head = nn.Linear(self.token_size, 1)
+            self.logit_head = nn.Linear(self.in_channels, 1)
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
 
-    def forward(self, z_quantized):
+    def forward(self, z_embeddings):
         if self.model_type == "mlp":
-            B, C, H, W = z_quantized.shape
+            # batch_size, self.in_channels, self.num_latent_tokens
+            B, C, W = z_embeddings.shape
             # DEBUG: print("\033[91mCHECK the shape of z_quantized", z_quantized.shape, "\033[0m")
-            z_flattened = rearrange(z_quantized, 'b c h w -> b h w c').contiguous()
-            z_flattened = rearrange(z_flattened, 'b h w c -> (b h w) c') # reshape as (b*h*w, c)
+            # z_flattened = rearrange(z_quantized, 'b c w -> b w c').contiguous()
+            z_flattened = rearrange(z_embeddings, 'b w c -> (b w) c') # reshape as (b*h*w, c)
             x = self.fc1(z_flattened)
-            x = self.fc2(x) # (b*h*w, 1)
-            # reshape back to (b, h*w)
+            x = self.fc2(x) # (b*w, 1)
+            # reshape back to (b, w)
             logits = x.reshape(B, -1)
             # DEBUG: print("\033[91mCHECK the shape of logits", logits.shape, "\033[0m")
             # apply softmax
@@ -433,14 +435,14 @@ class PolicyNet(nn.Module):
             return probs
         
         elif self.model_type == "transformer":
-            B, D, _, N = z_quantized.shape
-            z_quantized = z_quantized.squeeze(2).transpose(1, 2)  # [B, N, D]
+            B, N, D = z_embeddings.shape
+            # z_quantized = z_quantized.squeeze(2).transpose(1, 2)  # [B, N, D]
             
             # Add positional embeddings
-            z_quantized = z_quantized + self.positional_embedding
+            z_embeddings = z_embeddings + self.positional_embedding
             
             # Apply transformer
-            features = self.transformer(z_quantized)  # [B, N, D]
+            features = self.transformer(z_embeddings)  # [B, N, D]
             
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
@@ -448,15 +450,15 @@ class PolicyNet(nn.Module):
             return probs
         
         elif self.model_type == "causal_transformer":
-            B, D, _, N = z_quantized.shape
-            z_quantized = z_quantized.squeeze(2).transpose(1, 2)  # [B, N, D]
+            B, D, _, N = z_embeddings.shape
+            z_embeddings = z_embeddings.squeeze(2).transpose(1, 2)  # [B, N, D]
             
             # Add positional embeddings
-            z_quantized = z_quantized + self.positional_embedding
+            z_embeddings = z_embeddings + self.positional_embedding
             
             # Apply causal transformer
-            causal_mask = torch.triu(torch.ones(N, N), diagonal=1).bool().to(z_quantized.device)
-            features = self.transformer(z_quantized, src_mask=causal_mask)  # [B, N, D]
+            causal_mask = torch.triu(torch.ones(N, N), diagonal=1).bool().to(z_embeddings.device)
+            features = self.transformer(z_embeddings, src_mask=causal_mask)  # [B, N, D]
             
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
