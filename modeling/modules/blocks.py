@@ -418,7 +418,8 @@ class PolicyNet(nn.Module):
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
 
-    def forward(self, z_embeddings):
+    def forward(self, z_embeddings, temperature=1.0):
+        # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
         if self.model_type == "mlp":
             # batch_size, self.in_channels, self.num_latent_tokens
             B, C, W = z_embeddings.shape
@@ -431,7 +432,7 @@ class PolicyNet(nn.Module):
             logits = x.reshape(B, -1)
             # DEBUG: print("\033[91mCHECK the shape of logits", logits.shape, "\033[0m")
             # apply softmax
-            probs = torch.nn.functional.softmax(logits, dim=-1)
+            probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
             return probs
         
         elif self.model_type == "transformer":
@@ -446,7 +447,7 @@ class PolicyNet(nn.Module):
             
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
-            probs = torch.nn.functional.softmax(logits, dim=-1)
+            probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
             return probs
         
         elif self.model_type == "causal_transformer":
@@ -462,7 +463,7 @@ class PolicyNet(nn.Module):
             
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
-            probs = torch.nn.functional.softmax(logits, dim=-1)
+            probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
             return probs
         
         else:
