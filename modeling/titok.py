@@ -200,7 +200,16 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             alpha_end = self.policy_annealing.alpha_end # 1
             alpha_start = self.policy_annealing.alpha_start # 0
-            self.annealing_factor = alpha_start + (alpha_end - alpha_start) * (math.sin(0.5 * math.pi * global_step / max_train_steps) ** 2)
+
+            progress = global_step / max_train_steps
+
+            if progress < alpha_start:
+                self.annealing_factor = 0.0 # QY: Default starting alpha value, no actor loss
+            elif progress > alpha_end:
+                self.annealing_factor = 1.0 # QY: Default ending alpha value, emphasize actor loss
+            else:
+                normalized_progress = (progress - alpha_start) / (alpha_end - alpha_start)
+                self.annealing_factor = (math.sin(0.5 * math.pi * normalized_progress) ** 2)
 
     def encode(self, x, policy_net=PolicyNet|None, drop_p=0.0):
         if self.finetune_decoder:
