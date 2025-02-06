@@ -15,7 +15,7 @@ pip install torchinfo
 
 config_name='titok_b256_4096_12'
 model_type="mlp"
-tag="tradeoff_with_correct_loss_check_annealing"
+tag="check_z_embeddings_based_policy_net"
 ngpus=8
 export PYTHONPATH=$(pwd)
 

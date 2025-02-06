@@ -113,8 +113,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             raise NotImplementedError
 
+        self.policy_net = None
         if self.config.model.reconstruction_regularization.use_policy:
-            self.policy_net = PolicyNet(config)
+            self.policy_net = PolicyNet(config, self.encoder.width)
         
         if self.finetune_decoder:
             # Freeze encoder/quantizer/latent tokens
@@ -201,24 +202,43 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             alpha_start = self.policy_annealing.alpha_start # 0
             self.annealing_factor = alpha_start + (alpha_end - alpha_start) * (math.sin(0.5 * math.pi * global_step / max_train_steps) ** 2)
 
-    def encode(self, x, drop_p=0.0):
+    def encode(self, x, policy_net=PolicyNet|None, drop_p=0.0):
         if self.finetune_decoder:
             with torch.no_grad():
                 self.encoder.eval()
                 self.quantize.eval()
-                z = self.encoder(pixel_values=x, latent_tokens=self.latent_tokens)
+                z, z_embedding = self.encoder(
+                    pixel_values=x, 
+                    latent_tokens=self.latent_tokens,
+                )
                 z_quantized, result_dict = self.quantize(z)
                 result_dict["quantizer_loss"] *= 0
                 result_dict["commitment_loss"] *= 0
                 result_dict["codebook_loss"] *= 0
+                if policy_net:
+                    token_num_p = policy_net(z_embedding)
         else:
-            z = self.encoder(pixel_values=x, latent_tokens=self.latent_tokens)
+            z, z_embedding = self.encoder(
+                pixel_values=x, 
+                latent_tokens=self.latent_tokens,
+                )
             if self.quantize_mode == "vq":
                 z_quantized, result_dict = self.quantize(z)
             elif self.quantize_mode == "vae":
                 posteriors = self.quantize(z)
                 z_quantized = posteriors.sample()
                 result_dict = posteriors
+            if policy_net:
+                token_num_p = policy_net(z_embedding)
+
+        if policy_net:
+            sampled_num = torch.multinomial(token_num_p, num_samples=1)[:, 0]
+            sampled_prob = token_num_p[torch.arange(sampled_num.shape[0]),
+                                       sampled_num]
+            sampled_rate = 1 - sampled_num / self.num_latent_tokens
+
+            result_dict["sampled_mask_rate"] = sampled_rate
+            result_dict["prob_of_sampled_mask_rate"] = sampled_prob
 
         return z_quantized, result_dict
 
@@ -297,33 +317,20 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             raise ValueError("decode_mask_rate in forward() should be a float")
         
         # Step 1: ENCODE
-        z_quantized, result_dict = self.encode(x)
+        z_quantized, result_dict = self.encode(x, policy_net = self.policy_net)
 
         # Step 2: MASKING
         if self.config.model.reconstruction_regularization.use_policy and not fixed_mask_rate:
             # if using policy, instead of using random mask rate for training, we use the policy to estimate the mask rate
-            if self.finetune_decoder:
-                with torch.no_grad():
-                    num_used_tokens_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
-            else:
-                num_used_tokens_distribution = self.policy_net(z_quantized) # softmax output, [batch_size, num_of_tokens]
-            # DEBUG:
-            # print("\033[91mCHECK the shape", mask_rate_distribution.shape, "\033[0m")
-            # print("\033[91mCHECK for negative values", torch.any(mask_rate_distribution < 0), "\033[0m")
-            # print("\033[91mCHECK for nan values", torch.any(mask_rate_distribution != mask_rate_distribution), "\033[0m")
-            # print("\033[91mCHECK for inf values", torch.any(mask_rate_distribution == float('inf')), "\033[0m")
+            # Notice that this process has been put in the self.encode function
 
-            sampled_num_used_tokens = torch.multinomial(num_used_tokens_distribution, num_samples=1).squeeze(1) # [batch_size,]
-            prob_of_current_mask_rate = num_used_tokens_distribution[torch.arange(num_used_tokens_distribution.shape[0]), sampled_num_used_tokens]
-            sampled_mask_rate = 1 - sampled_num_used_tokens / self.num_latent_tokens # QY: the distribution is not for mask rate, but for used rate, we need to convert it back to mask rate
-            
-            # If using policy to estimate optimal mask rate, we need the distribution to compute the loss
-            result_dict["sampled_mask_rate"] = sampled_mask_rate
-            result_dict["prob_of_sampled_mask_rate"] = prob_of_current_mask_rate
+            # add additional parameters for printing
             result_dict["annealing_factor"] = self.annealing_factor
+            sampled_mask_rate = result_dict["sampled_mask_rate"]
 
         else:
             sampled_mask_rate= self.get_mask_rate(z_quantized, decode_mask_rate)
+            result_dict["sampled_mask_rate"] = sampled_mask_rate
         
         # STEP 3: DECODE
         decoded = self.decode(z_quantized, decode_mask_rate=sampled_mask_rate)
