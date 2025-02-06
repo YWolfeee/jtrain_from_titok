@@ -161,9 +161,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         try:
             tmp = config.model.reconstruction_regularization.policy.annealing
             self.policy_annealing = tmp if tmp.use_annealing else None
+            self.policy_annealing_softmax = tmp if tmp.use_annealing_softmax else None
         except:
             self.policy_annealing = None
+            self.policy_annealing_softmax = None
         self.set_policy_annealing_factor(0, config.training.max_train_steps)
+        self.set_policy_softmax_temperature(0, config.training.max_train_steps)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -193,6 +196,27 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
 
     def set_max_mask_rate(self, max_mask_rate):
         self.max_mask_rate = max_mask_rate
+
+    def set_policy_softmax_temperature(self, global_step: int, max_train_steps: int):
+        if self.policy_annealing_softmax is None:
+            self.softmax_temperature = 1.0
+        else:
+            start_time = self.policy_annealing_softmax.softmax_temperature_start_time  # e.g., 0.2
+            end_time = self.policy_annealing_softmax.softmax_temperature_end_time      # e.g., 1.0
+            start_value = self.policy_annealing_softmax.softmax_temperature_start_value  # e.g., 2.0
+            end_value = self.policy_annealing_softmax.softmax_temperature_end_value      # e.g., 0.01
+
+            progress = global_step / max_train_steps
+
+            if progress <= start_time:
+                self.softmax_temperature = start_value
+            elif progress >= end_time:
+                self.softmax_temperature = end_value
+            else:
+                # Cosine annealing
+                normalized_progress = (progress - start_time) / (end_time - start_time)
+                cosine_decay = 0.5 * (1 + math.cos(math.pi * normalized_progress))
+                self.softmax_temperature = end_value + (start_value - end_value) * cosine_decay
 
     def set_policy_annealing_factor(self, global_step: int, max_train_steps: int):
         if self.policy_annealing is None:
@@ -225,7 +249,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 result_dict["commitment_loss"] *= 0
                 result_dict["codebook_loss"] *= 0
                 if policy_net:
-                    token_num_p = policy_net(z_embedding)
+                    token_num_p = policy_net(z_embedding, temperature=self.softmax_temperature)
         else:
             z, z_embedding = self.encoder(
                 pixel_values=x, 
@@ -238,7 +262,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 z_quantized = posteriors.sample()
                 result_dict = posteriors
             if policy_net:
-                token_num_p = policy_net(z_embedding)
+                token_num_p = policy_net(z_embedding, temperature=self.softmax_temperature)
 
         if policy_net:
             sampled_num = torch.multinomial(token_num_p, num_samples=1)[:, 0]
@@ -335,6 +359,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
 
             # add additional parameters for printing
             result_dict["annealing_factor"] = self.annealing_factor
+            result_dict["softmax_temperature"] = self.softmax_temperature
             sampled_mask_rate = result_dict["sampled_mask_rate"]
 
         else:
