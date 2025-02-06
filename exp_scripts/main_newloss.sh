@@ -13,8 +13,9 @@ use_reconstruction_regularization=$4 # True
 use_policy_annealing=$5
 rate_weight=$6
 policy_network=$7
-output_root=$8
-job_name=$9         # Use as output dir
+alpha_start=$8
+output_root=$9
+job_name=$10         # Use as output dir
 
 ngpus=8
 
@@ -47,7 +48,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     model.reconstruction_regularization.policy.annealing.use_annealing=${use_policy_annealing} \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_start=${alpha_start} \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
     training.per_gpu_batch_size=${per_gpu_batch_size} \

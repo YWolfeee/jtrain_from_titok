@@ -211,7 +211,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 normalized_progress = (progress - alpha_start) / (alpha_end - alpha_start)
                 self.annealing_factor = (math.sin(0.5 * math.pi * normalized_progress) ** 2)
 
-    def encode(self, x, policy_net=PolicyNet|None, drop_p=0.0):
+    def encode(self, x, policy_net: PolicyNet = None, drop_p=0.0):
         if self.finetune_decoder:
             with torch.no_grad():
                 self.encoder.eval()
