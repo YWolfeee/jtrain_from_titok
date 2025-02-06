@@ -1000,7 +1000,7 @@ def reconstruct_images(model, original_images, fnames, accelerator,
         reconstructed_images_list.append(reconstructed_images)
 
     vis_dict = {}
-    if model.use_policy:
+    if accelerator.unwrap_model(model).use_policy:
         reconstructed_images, extra_results_dict = accelerator.unwrap_model(model).forward(original_images)
         if pretrained_tokenizer is not None:
             reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))

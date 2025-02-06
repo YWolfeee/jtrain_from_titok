@@ -136,7 +136,8 @@ def make_viz_from_samples(
             mask_rate = 1 - mask_rate
             policy_mask_rate = mask_rate * 100
             diff_img = torch.abs(reconstructed_images - original_images)
-        diff_img = torch.abs(reconstructed_images - prev_images)
+        else:
+            diff_img = torch.abs(reconstructed_images - prev_images)
         prev_images = reconstructed_images
         start_x = (i + 1) * img_width
         end_x = start_x + img_width
