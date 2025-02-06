@@ -15,7 +15,7 @@ pip install torchinfo
 
 config_name='titok_b256_4096_12'
 model_type="mlp"
-tag="check_z_embeddings_based_policy_net_No_annealing"
+tag="check_z_embeddings_no_policy"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -37,9 +37,9 @@ accelerate launch \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
     \
-    model.reconstruction_regularization.use_policy=True \
+    model.reconstruction_regularization.use_policy=False \
     model.reconstruction_regularization.policy.use_advantage=True \
-    model.reconstruction_regularization.policy.rate_weight=0.1 \
+    model.reconstruction_regularization.policy.rate_weight=0.0 \
     model.reconstruction_regularization.policy.model_type=${model_type} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \

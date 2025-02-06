@@ -6,7 +6,7 @@ experiment:
     save_every: 5_000
     eval_every: 5_000
     eval_loss_every: 5_00
-    generate_every: 5_000
+    generate_every: 5_00
     log_every: 50
     log_grad_norm_every: 1_000
     resume: True
