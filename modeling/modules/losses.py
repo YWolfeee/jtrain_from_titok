@@ -121,8 +121,6 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 quantizer_loss=(self.quantizer_weight * extra_input_dict["quantizer_loss"]).detach(),
                 commitment_loss=extra_input_dict["commitment_loss"].detach(),
                 codebook_loss=extra_input_dict["codebook_loss"].detach(),
-                annealing_factor=torch.tensor([extra_input_dict["annealing_factor"]]),
-                softmax_temperature=torch.tensor([extra_input_dict["softmax_temperature"]]),
             )
 
             return total_loss, loss_dict

@@ -538,6 +538,8 @@ def train_one_epoch(config, logger, accelerator,
                 logs = {
                     "lr": lr,
                     "lr/generator": lr,
+                    "lr/annealing_factor": accelerator.unwrap_model(model).annealing_factor,
+                    "lr/softmax_temperature": accelerator.unwrap_model(model).softmax_temperature,
                     "samples/sec/gpu": samples_per_second_per_gpu,
                     "time/data_time": data_time_meter.val,
                     "time/batch_time": batch_time_meter.val,
