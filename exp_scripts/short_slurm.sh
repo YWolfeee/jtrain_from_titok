@@ -48,11 +48,9 @@ accelerate launch \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.2 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing_softmax=False \
-    model.reconstruction_regularization.policy.annealing.softmax_temperature_start_time=0.2 \
-    model.reconstruction_regularization.policy.annealing.softmax_temperature_end_time=1.0 \
-    model.reconstruction_regularization.policy.annealing.softmax_temperature_start_value=2.0 \
-    model.reconstruction_regularization.policy.annealing.softmax_temperature_end_value=0.01 \
+    model.reconstruction_regularization.policy.temperature.use_T=False \
+    model.reconstruction_regularization.policy.temperature.T0=1000 \
+    model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \

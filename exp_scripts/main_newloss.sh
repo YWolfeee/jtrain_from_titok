@@ -13,7 +13,7 @@ use_reconstruction_regularization=$4 # True
 use_policy_annealing=$5
 rate_weight=$6
 policy_network=$7
-alpha_start=$8
+softmax_T0=$8
 output_root=$9
 job_name=${10}         # Use as output dir
 
@@ -48,8 +48,12 @@ accelerate launch \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     model.reconstruction_regularization.policy.annealing.use_annealing=${use_policy_annealing} \
-    model.reconstruction_regularization.policy.annealing.alpha_start=${alpha_start} \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
+    \
+    model.reconstruction_regularization.policy.temperature.use_T=True \
+    model.reconstruction_regularization.policy.temperature.T0=${softmax_T0} \
+    model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
     training.per_gpu_batch_size=${per_gpu_batch_size} \
     optimizer.params.learning_rate=${lr} \

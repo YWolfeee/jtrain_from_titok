@@ -161,11 +161,15 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         try:
             tmp = config.model.reconstruction_regularization.policy.annealing
             self.policy_annealing = tmp if tmp.use_annealing else None
-            self.policy_annealing_softmax = tmp if tmp.use_annealing_softmax else None
         except:
             self.policy_annealing = None
-            self.policy_annealing_softmax = None
         self.set_policy_annealing_factor(0, config.training.max_train_steps)
+
+        try:
+            tmp = config.model.reconstruction_regularization.policy.temperature
+            self.softmax_annealing = tmp if tmp.use_T else None
+        except:
+            self.softmax_annealing = None            
         self.set_policy_softmax_temperature(0, config.training.max_train_steps)
         
     def _save_pretrained(self, save_directory: Path) -> None:
@@ -198,25 +202,24 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.max_mask_rate = max_mask_rate
 
     def set_policy_softmax_temperature(self, global_step: int, max_train_steps: int):
-        if self.policy_annealing_softmax is None:
+        if self.softmax_annealing is None:
             self.softmax_temperature = 1.0
         else:
-            start_time = self.policy_annealing_softmax.softmax_temperature_start_time  # e.g., 0.2
-            end_time = self.policy_annealing_softmax.softmax_temperature_end_time      # e.g., 1.0
-            start_value = self.policy_annealing_softmax.softmax_temperature_start_value  # e.g., 2.0
-            end_value = self.policy_annealing_softmax.softmax_temperature_end_value      # e.g., 0.01
+            T0 = self.softmax_annealing.T0  # e.g., 0.2
+            alpha = self.softmax_annealing.alpha      # e.g., 1.0
+            self.softmax_temperature = 1 + T0 * math.exp(- alpha * global_step)
 
-            progress = global_step / max_train_steps
+            # progress = global_step / max_train_steps
 
-            if progress <= start_time:
-                self.softmax_temperature = start_value
-            elif progress >= end_time:
-                self.softmax_temperature = end_value
-            else:
-                # Cosine annealing
-                normalized_progress = (progress - start_time) / (end_time - start_time)
-                cosine_decay = 0.5 * (1 + math.cos(math.pi * normalized_progress))
-                self.softmax_temperature = end_value + (start_value - end_value) * cosine_decay
+            # if progress <= start_time:
+            #     self.softmax_temperature = start_value
+            # elif progress >= end_time:
+            #     self.softmax_temperature = end_value
+            # else:
+            #     # Cosine annealing
+            #     normalized_progress = (progress - start_time) / (end_time - start_time)
+            #     cosine_decay = 0.5 * (1 + math.cos(math.pi * normalized_progress))
+            #     self.softmax_temperature = end_value + (start_value - end_value) * cosine_decay
 
     def set_policy_annealing_factor(self, global_step: int, max_train_steps: int):
         if self.policy_annealing is None:

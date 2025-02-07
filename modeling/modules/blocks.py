@@ -451,8 +451,8 @@ class PolicyNet(nn.Module):
             return probs
         
         elif self.model_type == "causal_transformer":
-            B, D, _, N = z_embeddings.shape
-            z_embeddings = z_embeddings.squeeze(2).transpose(1, 2)  # [B, N, D]
+            B, N, D = z_embeddings.shape
+            # z_embeddings = z_embeddings.squeeze(2).transpose(1, 2)  # [B, N, D]
             
             # Add positional embeddings
             z_embeddings = z_embeddings + self.positional_embedding
