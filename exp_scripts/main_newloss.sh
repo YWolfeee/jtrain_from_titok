@@ -15,7 +15,7 @@ rate_weight=$6
 policy_network=$7
 alpha_start=$8
 output_root=$9
-job_name=$10         # Use as output dir
+job_name=${10}         # Use as output dir
 
 ngpus=8
 
