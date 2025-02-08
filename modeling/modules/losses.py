@@ -95,18 +95,22 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
             
             distortion_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
                             target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
-            rate_loss = 1 - extra_input_dict["sampled_mask_rate"] # [B,]
+            rate_loss = 1 - extra_input_dict["mask_rate_value"] # [B,]
             
             critic_loss = distortion_loss + self.rate_weight * rate_loss
-            if self.config.model.reconstruction_regularization.policy.use_advantage:
-                reward = critic_loss - torch.mean(critic_loss)
-                reward = reward.detach()
+            if self.config.model.reconstruction_regularization.use_gumbel_softmax: # The reinforce framework
+                critic_loss = critic_loss.mean()
+                actor_loss = torch.zeros_like(critic_loss)
             else:
-                reward = critic_loss.detach()
-            actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
-            critic_loss = critic_loss.mean()
-            actor_loss = actor_loss.mean()
-            
+                if self.config.model.reconstruction_regularization.policy.use_advantage:
+                    reward = critic_loss - torch.mean(critic_loss)
+                    reward = reward.detach()
+                else:
+                    reward = critic_loss.detach()
+                actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
+                critic_loss = critic_loss.mean()
+                actor_loss = actor_loss.mean()
+
             total_loss = critic_loss + extra_input_dict["annealing_factor"] * actor_loss + \
             self.quantizer_weight * extra_input_dict["quantizer_loss"]
 
@@ -115,7 +119,6 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 reconstruction_loss=distortion_loss.mean().detach(),
                 rate_loss=rate_loss.mean().detach(),
                 rate_std=rate_loss.std().detach(),  # sample wise variance
-                prob_mean=extra_input_dict["prob_of_sampled_mask_rate"].mean().detach(),
                 actor_loss=actor_loss.detach(),
                 critic_loss=critic_loss.detach(),
                 quantizer_loss=(self.quantizer_weight * extra_input_dict["quantizer_loss"]).detach(),

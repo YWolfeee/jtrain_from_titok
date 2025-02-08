@@ -15,7 +15,7 @@ pip install torchinfo
 
 config_name='titok_b256_4096_12'
 model_type="mlp"
-tag="check_z_embeddings_no_policy"
+tag="check_z_embeddings_gumbel_softmax_hard_beta=0.001"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -37,19 +37,24 @@ accelerate launch \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
     \
-    model.reconstruction_regularization.use_policy=False \
-    model.reconstruction_regularization.policy.use_advantage=True \
-    model.reconstruction_regularization.policy.rate_weight=0.0 \
+    model.reconstruction_regularization.use_policy=True \
     model.reconstruction_regularization.policy.model_type=${model_type} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=True \
+    model.reconstruction_regularization.policy.use_advantage=True \
+    model.reconstruction_regularization.policy.rate_weight=0.001 \
+    \
+    model.reconstruction_regularization.use_gumbel_softmax=True \
+    model.reconstruction_regularization.gumbel_softmax.hard=True \
+    model.reconstruction_regularization.gumbel_softmax.fix_tau=True \
+    \
+    model.reconstruction_regularization.policy.annealing.use_annealing=False \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.2 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
-    model.reconstruction_regularization.policy.temperature.use_T=False \
-    model.reconstruction_regularization.policy.temperature.T0=1000 \
+    model.reconstruction_regularization.policy.temperature.use_T=True \
+    model.reconstruction_regularization.policy.temperature.T0=10000 \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
     training.per_gpu_batch_size=64 \

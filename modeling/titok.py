@@ -158,6 +158,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         except:
             self.use_policy = False
 
+        self.gumbel_softmax = None
+        try:
+            if config.model.reconstruction_regularization.use_gumbel_softmax:
+                self.gumbel_softmax = config.model.reconstruction_regularization.gumbel_softmax
+        except:
+            self.gumbel_softmax = None
+
         try:
             tmp = config.model.reconstruction_regularization.policy.annealing
             self.policy_annealing = tmp if tmp.use_annealing else None
@@ -252,7 +259,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 result_dict["commitment_loss"] *= 0
                 result_dict["codebook_loss"] *= 0
                 if policy_net:
-                    token_num_p = policy_net(z_embedding, temperature=self.softmax_temperature)
+                    output_dict = policy_net(z_embedding, temperature=self.softmax_temperature)
         else:
             z, z_embedding = self.encoder(
                 pixel_values=x, 
@@ -265,16 +272,10 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 z_quantized = posteriors.sample()
                 result_dict = posteriors
             if policy_net:
-                token_num_p = policy_net(z_embedding, temperature=self.softmax_temperature)
+                output_dict = policy_net(z_embedding, temperature=self.softmax_temperature, gumbel_softmax=self.gumbel_softmax)
 
         if policy_net:
-            sampled_num = torch.multinomial(token_num_p, num_samples=1)[:, 0]
-            sampled_prob = token_num_p[torch.arange(sampled_num.shape[0]),
-                                       sampled_num]
-            sampled_rate = 1 - sampled_num / self.num_latent_tokens
-
-            result_dict["sampled_mask_rate"] = sampled_rate
-            result_dict["prob_of_sampled_mask_rate"] = sampled_prob
+            result_dict.update(output_dict)
 
         return z_quantized, result_dict
 
@@ -303,16 +304,21 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             decode_mask_rate = 0.0
         if isinstance(decode_mask_rate, float):
             decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.device).expand(z_quantized.shape[0])
-        # mask rate is a tensor with shape (batch_size,)
-        # values could be identical inside
-        if self.regularization_name == "matryoshka":
-            z_quantized = self.matryoshka_masking(z_quantized, mask_rate=decode_mask_rate)
-        elif self.regularization_name == "random":
-            raise NotImplementedError(
-                "This training approach has been deprecated.")
-            z_quantized = self.random_masking(z_quantized, mask_rate=decode_mask_rate)
+
+        if len(decode_mask_rate.shape) == 2:
+            assert decode_mask_rate.shape[-1] == z_quantized.shape[-1]
+            z_quantized = decode_mask_rate[:, None, None] * z_quantized
         else:
-            raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
+            # mask rate is a tensor with shape (batch_size,)
+            # values could be identical inside
+            if self.regularization_name == "matryoshka":
+                z_quantized = self.matryoshka_masking(z_quantized, mask_rate=decode_mask_rate)
+            elif self.regularization_name == "random":
+                raise NotImplementedError(
+                    "This training approach has been deprecated.")
+                z_quantized = self.random_masking(z_quantized, mask_rate=decode_mask_rate)
+            else:
+                raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
         # z_quantized.shape: [batch_size, token_dim, 1, num_tokens]
         decoded = self.decoder(z_quantized)
         if self.finetune_decoder:
@@ -368,6 +374,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             sampled_mask_rate= self.get_mask_rate(z_quantized, decode_mask_rate)
             result_dict["sampled_mask_rate"] = sampled_mask_rate
+            result_dict["mask_rate_value"] = sampled_mask_rate
         
         # STEP 3: DECODE
         decoded = self.decode(z_quantized, decode_mask_rate=sampled_mask_rate)

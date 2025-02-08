@@ -418,7 +418,7 @@ class PolicyNet(nn.Module):
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
 
-    def forward(self, z_embeddings, temperature=1.0):
+    def forward(self, z_embeddings, temperature=1.0, gumbel_softmax=None):
         # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
         if self.model_type == "mlp":
             # batch_size, self.in_channels, self.num_latent_tokens
@@ -432,8 +432,6 @@ class PolicyNet(nn.Module):
             logits = x.reshape(B, -1)
             # DEBUG: print("\033[91mCHECK the shape of logits", logits.shape, "\033[0m")
             # apply softmax
-            probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
-            return probs
         
         elif self.model_type == "transformer":
             B, N, D = z_embeddings.shape
@@ -447,8 +445,6 @@ class PolicyNet(nn.Module):
             
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
-            probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
-            return probs
         
         elif self.model_type == "causal_transformer":
             B, N, D = z_embeddings.shape
@@ -463,11 +459,41 @@ class PolicyNet(nn.Module):
             
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
-            probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
-            return probs
         
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
+
+        if gumbel_softmax is not None: # we don't do reinforce
+            # This is actually a vector of shape (btz, max_code_length)
+            if gumbel_softmax.fix_tau:
+                logits /= temperature
+                temperature = 1.0
+
+            sampled_rate = torch.nn.functional.gumbel_softmax(
+                    logits,
+                    hard=gumbel_softmax.hard,
+                    tau=temperature,
+                    dim=-1)
+            N = sampled_rate.shape[-1]
+            MASK = torch.tril(torch.ones((N, N), device=sampled_rate.device), 
+                              diagonal=0)
+            sampled_rate = sampled_rate @ MASK
+            return {
+                "sampled_mask_rate": sampled_rate,
+                "mask_rate_value": 1 - sampled_rate.mean(dim=-1)
+            }
+        else:
+            probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
+            sampled_num = torch.multinomial(probs, num_samples=1)[:, 0]
+            sampled_prob = probs[torch.arange(sampled_num.shape[0]),
+                                        sampled_num]
+            mask_rate = 1 - sampled_num / self.num_latent_tokens
+
+            return {
+                "sampled_mask_rate": mask_rate,
+                "mask_rate_value": mask_rate,
+                "prob_of_sampled_mask_rate": sampled_prob
+            }
         
         
         
