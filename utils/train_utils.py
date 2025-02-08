@@ -1010,7 +1010,7 @@ def reconstruct_images(model, original_images, fnames, accelerator,
         if pretrained_tokenizer is not None:
             reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
         reconstructed_images_list.append(reconstructed_images)
-        policy_mask_rate = extra_results_dict["sampled_mask_rate"]
+        policy_mask_rate = extra_results_dict["mask_rate_value"]
         vis_dict["policy_mask_rate"] = policy_mask_rate
     
     images_for_saving, images_for_logging = make_viz_from_samples(

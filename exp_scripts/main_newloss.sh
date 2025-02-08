@@ -13,7 +13,7 @@ use_reconstruction_regularization=$4 # True
 use_policy_annealing=$5
 rate_weight=$6
 policy_network=$7
-softmax_T0=$8
+fix_tau=$8
 output_root=$9
 job_name=${10}         # Use as output dir
 
@@ -41,18 +41,22 @@ accelerate launch \
     losses.use_self_distilliation=False \
     \
     model.reconstruction_regularization.use_policy=True \
-    model.reconstruction_regularization.policy.use_advantage=True \
     model.reconstruction_regularization.policy.rate_weight=${rate_weight} \
     model.reconstruction_regularization.policy.model_type=${policy_network} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
+    \
+    model.reconstruction_regularization.policy.use_advantage=True \
+    model.reconstruction_regularization.use_gumbel_softmax=True \
+    model.reconstruction_regularization.gumbel_softmax.hard=True \
+    model.reconstruction_regularization.gumbel_softmax.fix_tau=${fix_tau} \
     \
     model.reconstruction_regularization.policy.annealing.use_annealing=${use_policy_annealing} \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
     model.reconstruction_regularization.policy.temperature.use_T=True \
-    model.reconstruction_regularization.policy.temperature.T0=${softmax_T0} \
+    model.reconstruction_regularization.policy.temperature.T0=10000 \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
     training.per_gpu_batch_size=${per_gpu_batch_size} \
