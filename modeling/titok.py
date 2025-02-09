@@ -178,6 +178,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         except:
             self.softmax_annealing = None            
         self.set_policy_softmax_temperature(0, config.training.max_train_steps)
+
+        try:
+            tmp = config.model.reconstruction_regularization.policy.gaussian_smoothing
+            self.gaussian_smoothing = tmp if tmp.use_gaussian_smoothing else None
+        except:
+            self.gaussian_smoothing = None
+        self.set_gaussian_smoothing(0, config.training.max_train_steps)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -228,6 +235,33 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             #     cosine_decay = 0.5 * (1 + math.cos(math.pi * normalized_progress))
             #     self.softmax_temperature = end_value + (start_value - end_value) * cosine_decay
 
+    def set_gaussian_smoothing(self, global_step: int, max_train_steps: int):
+        if self.gaussian_smoothing.use_gaussian_smoothing:
+            self.kernel_size = self.gaussian_smoothing.kernel_size
+            start_time = self.gaussian_smoothing.start_time
+            end_time = self.gaussian_smoothing.end_time
+            start_value = self.gaussian_smoothing.start_value
+            end_value = self.gaussian_smoothing.end_value
+        else:
+            self.kernel_size = None
+            start_time = 0
+            end_time = 0
+            start_value = 0
+            end_value = 0
+            return
+
+        progress = global_step / max_train_steps
+
+        if progress <= start_time:
+            self.sigma = start_value
+        elif progress >= end_time:
+            self.sigma = end_value
+        else:
+            # Cosine annealing
+            normalized_progress = (progress - start_time) / (end_time - start_time)
+            cosine_decay = 0.5 * (1 + math.cos(math.pi * normalized_progress))
+            self.sigma = end_value + (start_value - end_value) * cosine_decay
+
     def set_policy_annealing_factor(self, global_step: int, max_train_steps: int):
         if self.policy_annealing is None:
             self.annealing_factor = 1.0
@@ -259,7 +293,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 result_dict["commitment_loss"] *= 0
                 result_dict["codebook_loss"] *= 0
                 if policy_net:
-                    output_dict = policy_net(z_embedding, temperature=self.softmax_temperature)
+                    output_dict = policy_net(z_embedding, 
+                                             temperature=self.softmax_temperature, 
+                                             gumbel_softmax=self.gumbel_softmax,
+                                             use_gaussian_smoothing=self.gaussian_smoothing.use_gaussian_smoothing,
+                                             kernel_size=self.kernel_size,
+                                             sigma=self.sigma)
         else:
             z, z_embedding = self.encoder(
                 pixel_values=x, 
@@ -272,7 +311,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 z_quantized = posteriors.sample()
                 result_dict = posteriors
             if policy_net:
-                output_dict = policy_net(z_embedding, temperature=self.softmax_temperature, gumbel_softmax=self.gumbel_softmax)
+                output_dict = policy_net(z_embedding, 
+                                         temperature=self.softmax_temperature, 
+                                         gumbel_softmax=self.gumbel_softmax,
+                                         use_gaussian_smoothing=self.gaussian_smoothing.use_gaussian_smoothing,
+                                         kernel_size=self.kernel_size,
+                                         sigma=self.sigma)
 
         if policy_net:
             result_dict.update(output_dict)
