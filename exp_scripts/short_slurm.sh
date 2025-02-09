@@ -57,6 +57,10 @@ accelerate launch \
     model.reconstruction_regularization.policy.temperature.T0=10000 \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
+    model.reconstruction_regularization.policy.use_gaussian_smoothing=True \
+    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=64 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.sigma=5.0 \
+    \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \
