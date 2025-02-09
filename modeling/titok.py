@@ -238,7 +238,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
     def set_gaussian_smoothing(self, global_step: int, max_train_steps: int, start_time=0.0, end_time=1.0, end_value=1.0):
         if self.gaussian_smoothing:
             self.gaussian_kernel_size = self.gaussian_smoothing.kernel_size
-            start_value = self.gaussian_smoothing.start_value
+            start_value = (self.gaussian_kernel_size - 1) // 2
         else:
             self.gaussian_kernel_size = None
             self.sigma = None
