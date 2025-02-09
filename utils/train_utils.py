@@ -378,6 +378,9 @@ def train_one_epoch(config, logger, accelerator,
 
         accelerator.unwrap_model(model).set_policy_softmax_temperature(
             global_step, config.training.max_train_steps)
+        
+        accelerator.unwrap_model(model).set_gaussian_smoothing(
+            global_step, config.training.max_train_steps)
 
         with accelerator.accumulate([model, loss_module]):
             reconstructed_images, extra_results_dict = model(images)

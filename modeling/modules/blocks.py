@@ -417,21 +417,8 @@ class PolicyNet(nn.Module):
             self.logit_head = nn.Linear(self.in_channels, 1)
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
-        
-        try:
-            tmp = config.model.reconstruction_regularization.policy.use_gaussian_smoothing
-            self.use_gaussian_smoothing = tmp
-            if self.use_gaussian_smoothing:
-                self.kernel_size = config.model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size
-                self.sigma = config.model.reconstruction_regularization.policy.gaussian_smoothing.sigma
-                self.smoothing = GaussianSmoothing(kernel_size=self.kernel_size, sigma=self.sigma)
-            else:
-                self.smoothing = None
-        except:
-            self.use_gaussian_smoothing = False
-            self.smoothing = None
 
-    def forward(self, z_embeddings, temperature=1.0, gumbel_softmax=None):
+    def forward(self, z_embeddings, temperature=1.0, gumbel_softmax=None, use_gaussian_smoothing=False, kernel_size=64, sigma=5.0):
         # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
         if self.model_type == "mlp":
             # batch_size, self.in_channels, self.num_latent_tokens
@@ -477,8 +464,8 @@ class PolicyNet(nn.Module):
             raise ValueError(f"Invalid model type: {self.model_type}")
         
         # Gaussian smoothing
-        if self.use_gaussian_smoothing:
-            logits = self.smoothing(logits)
+        if use_gaussian_smoothing:
+            logits = apply_gaussian_smoothing(logits, kernel_size, sigma)
 
         if gumbel_softmax is not None: # we don't do reinforce
             # This is actually a vector of shape (btz, max_code_length)
@@ -512,21 +499,32 @@ class PolicyNet(nn.Module):
                 "prob_of_sampled_mask_rate": sampled_prob
             }
         
-class GaussianSmoothing(nn.Module):
-    def __init__(self, kernel_size: int, sigma: float):
-        super(GaussianSmoothing, self).__init__()
-        self.kernel = self.gaussian_kernel(kernel_size, sigma)
-        self.padding = kernel_size // 2
+def apply_gaussian_smoothing(logits, kernel_size=64, sigma=5.0):
+    """
+    Apply Gaussian smoothing to a 1D tensor of logits.
 
-    def gaussian_kernel(self, size: int, sigma: float):
-        x = torch.arange(-size // 2 + 1, size // 2 + 1, dtype=torch.float32)
-        kernel = torch.exp(-0.5 * (x / sigma) ** 2)
-        kernel = kernel / kernel.sum()
-        return kernel.view(1, 1, -1)
+    Parameters:
+    logits (torch.Tensor): The input tensor with shape [batch_size, length].
+    kernel_size (int): The size of the Gaussian kernel.
+    sigma (float): The standard deviation of the Gaussian kernel.
 
-    def forward(self, x):
-        x = nn.functional.pad(x, (self.padding, self.padding), mode='reflect')
-        x = nn.functional.conv1d(x, self.kernel)
-        return x
+    Returns:
+    torch.Tensor: The smoothed logits tensor with the same shape as input.
+    """
+    # Ensure kernel_size is odd to have a symmetric kernel
+    if kernel_size % 2 == 0:
+        raise ValueError("kernel_size must be an odd number.")
+
+    # Create a 1D Gaussian kernel
+    x = torch.arange(kernel_size, dtype=logits.dtype, device=logits.device) - (kernel_size - 1) / 2
+    kernel = torch.exp(-0.5 * (x / sigma) ** 2)
+    kernel = kernel / kernel.sum()
+    kernel = kernel.view(1, 1, -1)
+
+    logits = logits.unsqueeze(1)
+    smoothed_logits = nn.functional.conv1d(logits, kernel, padding=kernel_size // 2)
+    smoothed_logits = smoothed_logits.squeeze(1)
+
+    return smoothed_logits
         
         
