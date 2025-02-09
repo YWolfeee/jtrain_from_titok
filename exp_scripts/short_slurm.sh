@@ -59,10 +59,7 @@ accelerate launch \
     \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=True \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
-    model.reconstruction_regularization.policy.gaussian_smoothing.start_time=0.0 \
-    model.reconstruction_regularization.policy.gaussian_smoothing.end_time=1.0 \
     model.reconstruction_regularization.policy.gaussian_smoothing.start_value=30.0 \
-    model.reconstruction_regularization.policy.gaussian_smoothing.end_value=0.1 \
     \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \

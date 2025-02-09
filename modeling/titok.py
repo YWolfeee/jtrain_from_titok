@@ -235,20 +235,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             #     cosine_decay = 0.5 * (1 + math.cos(math.pi * normalized_progress))
             #     self.softmax_temperature = end_value + (start_value - end_value) * cosine_decay
 
-    def set_gaussian_smoothing(self, global_step: int, max_train_steps: int):
+    def set_gaussian_smoothing(self, global_step: int, max_train_steps: int, start_time=0.0, end_time=1.0, end_value=1.0):
         if self.gaussian_smoothing:
             self.gaussian_kernel_size = self.gaussian_smoothing.kernel_size
-            start_time = self.gaussian_smoothing.start_time
-            end_time = self.gaussian_smoothing.end_time
             start_value = self.gaussian_smoothing.start_value
-            end_value = self.gaussian_smoothing.end_value
         else:
             self.gaussian_kernel_size = None
             self.sigma = None
-            start_time = 0
-            end_time = 0
-            start_value = 0
-            end_value = 0
             return
 
         progress = global_step / max_train_steps
