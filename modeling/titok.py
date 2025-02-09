@@ -236,7 +236,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             #     self.softmax_temperature = end_value + (start_value - end_value) * cosine_decay
 
     def set_gaussian_smoothing(self, global_step: int, max_train_steps: int):
-        if self.gaussian_smoothing.use_gaussian_smoothing:
+        if self.gaussian_smoothing:
             self.kernel_size = self.gaussian_smoothing.kernel_size
             start_time = self.gaussian_smoothing.start_time
             end_time = self.gaussian_smoothing.end_time
@@ -296,7 +296,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                     output_dict = policy_net(z_embedding, 
                                              temperature=self.softmax_temperature, 
                                              gumbel_softmax=self.gumbel_softmax,
-                                             use_gaussian_smoothing=self.gaussian_smoothing.use_gaussian_smoothing,
+                                             gaussian_smoothing=self.gaussian_smoothing,
                                              kernel_size=self.kernel_size,
                                              sigma=self.sigma)
         else:
@@ -314,7 +314,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 output_dict = policy_net(z_embedding, 
                                          temperature=self.softmax_temperature, 
                                          gumbel_softmax=self.gumbel_softmax,
-                                         use_gaussian_smoothing=self.gaussian_smoothing.use_gaussian_smoothing,
+                                         gaussian_smoothing=self.gaussian_smoothing,
                                          kernel_size=self.kernel_size,
                                          sigma=self.sigma)
 

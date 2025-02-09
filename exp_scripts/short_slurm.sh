@@ -58,10 +58,10 @@ accelerate launch \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=True \
-    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=64 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     model.reconstruction_regularization.policy.gaussian_smoothing.start_time=0.0 \
     model.reconstruction_regularization.policy.gaussian_smoothing.end_time=1.0 \
-    model.reconstruction_regularization.policy.gaussian_smoothing.init_sigma=5.0 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.init_sigma=30.0 \
     model.reconstruction_regularization.policy.gaussian_smoothing.final_sigma=0.1 \
     \
     training.per_gpu_batch_size=64 \

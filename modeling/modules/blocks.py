@@ -418,7 +418,7 @@ class PolicyNet(nn.Module):
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
 
-    def forward(self, z_embeddings, temperature=1.0, gumbel_softmax=None, use_gaussian_smoothing=False, kernel_size=64, sigma=5.0):
+    def forward(self, z_embeddings, temperature=1.0, gumbel_softmax=None, gaussian_smoothing=None, kernel_size=65, sigma=30.0):
         # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
         if self.model_type == "mlp":
             # batch_size, self.in_channels, self.num_latent_tokens
@@ -426,8 +426,8 @@ class PolicyNet(nn.Module):
             # DEBUG: print("\033[91mCHECK the shape of z_quantized", z_quantized.shape, "\033[0m")
             # z_flattened = rearrange(z_quantized, 'b c w -> b w c').contiguous()
             z_flattened = rearrange(z_embeddings, 'b w c -> (b w) c') # reshape as (b*h*w, c)
-            x = self.fc1(z_flattened)
-            x = nn.functional.silu(self.fc2(x)) # (b*w, 1)
+            x = nn.functional.silu(self.fc1(z_flattened))
+            x = self.fc2(x) # (b*w, 1)
             # reshape back to (b, w)
             logits = x.reshape(B, -1)
             # DEBUG: print("\033[91mCHECK the shape of logits", logits.shape, "\033[0m")
@@ -464,7 +464,7 @@ class PolicyNet(nn.Module):
             raise ValueError(f"Invalid model type: {self.model_type}")
         
         # Gaussian smoothing
-        if use_gaussian_smoothing:
+        if gaussian_smoothing is not None:
             logits = apply_gaussian_smoothing(logits, kernel_size, sigma)
 
         if gumbel_softmax is not None: # we don't do reinforce
