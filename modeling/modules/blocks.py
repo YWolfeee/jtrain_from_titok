@@ -417,6 +417,19 @@ class PolicyNet(nn.Module):
             self.logit_head = nn.Linear(self.in_channels, 1)
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
+        
+        try:
+            tmp = config.model.reconstruction_regularization.policy.use_gaussian_smoothing
+            self.use_gaussian_smoothing = tmp
+            if self.use_gaussian_smoothing:
+                self.kernel_size = config.model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size
+                self.sigma = config.model.reconstruction_regularization.policy.gaussian_smoothing.sigma
+                self.smoothing = GaussianSmoothing(kernel_size=self.kernel_size, sigma=self.sigma)
+            else:
+                self.smoothing = None
+        except:
+            self.use_gaussian_smoothing = False
+            self.smoothing = None
 
     def forward(self, z_embeddings, temperature=1.0, gumbel_softmax=None):
         # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
@@ -427,7 +440,7 @@ class PolicyNet(nn.Module):
             # z_flattened = rearrange(z_quantized, 'b c w -> b w c').contiguous()
             z_flattened = rearrange(z_embeddings, 'b w c -> (b w) c') # reshape as (b*h*w, c)
             x = self.fc1(z_flattened)
-            x = self.fc2(x) # (b*w, 1)
+            x = nn.functional.silu(self.fc2(x)) # (b*w, 1)
             # reshape back to (b, w)
             logits = x.reshape(B, -1)
             # DEBUG: print("\033[91mCHECK the shape of logits", logits.shape, "\033[0m")
@@ -462,6 +475,10 @@ class PolicyNet(nn.Module):
         
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
+        
+        # Gaussian smoothing
+        if self.use_gaussian_smoothing:
+            logits = self.smoothing(logits)
 
         if gumbel_softmax is not None: # we don't do reinforce
             # This is actually a vector of shape (btz, max_code_length)
@@ -495,5 +512,21 @@ class PolicyNet(nn.Module):
                 "prob_of_sampled_mask_rate": sampled_prob
             }
         
+class GaussianSmoothing(nn.Module):
+    def __init__(self, kernel_size: int, sigma: float):
+        super(GaussianSmoothing, self).__init__()
+        self.kernel = self.gaussian_kernel(kernel_size, sigma)
+        self.padding = kernel_size // 2
+
+    def gaussian_kernel(self, size: int, sigma: float):
+        x = torch.arange(-size // 2 + 1, size // 2 + 1, dtype=torch.float32)
+        kernel = torch.exp(-0.5 * (x / sigma) ** 2)
+        kernel = kernel / kernel.sum()
+        return kernel.view(1, 1, -1)
+
+    def forward(self, x):
+        x = nn.functional.pad(x, (self.padding, self.padding), mode='reflect')
+        x = nn.functional.conv1d(x, self.kernel)
+        return x
         
         
