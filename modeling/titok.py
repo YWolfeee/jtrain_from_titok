@@ -237,13 +237,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
 
     def set_gaussian_smoothing(self, global_step: int, max_train_steps: int):
         if self.gaussian_smoothing:
-            self.kernel_size = self.gaussian_smoothing.kernel_size
+            self.gaussian_kernel_size = self.gaussian_smoothing.kernel_size
             start_time = self.gaussian_smoothing.start_time
             end_time = self.gaussian_smoothing.end_time
             start_value = self.gaussian_smoothing.start_value
             end_value = self.gaussian_smoothing.end_value
         else:
-            self.kernel_size = None
+            self.gaussian_kernel_size = None
             start_time = 0
             end_time = 0
             start_value = 0
@@ -297,7 +297,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                                              temperature=self.softmax_temperature, 
                                              gumbel_softmax=self.gumbel_softmax,
                                              gaussian_smoothing=self.gaussian_smoothing,
-                                             kernel_size=self.kernel_size,
+                                             kernel_size=self.gaussian_kernel_size,
                                              sigma=self.sigma)
         else:
             z, z_embedding = self.encoder(
@@ -315,7 +315,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                                          temperature=self.softmax_temperature, 
                                          gumbel_softmax=self.gumbel_softmax,
                                          gaussian_smoothing=self.gaussian_smoothing,
-                                         kernel_size=self.kernel_size,
+                                         kernel_size=self.gaussian_kernel_size,
                                          sigma=self.sigma)
 
         if policy_net:
