@@ -244,6 +244,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             end_value = self.gaussian_smoothing.end_value
         else:
             self.gaussian_kernel_size = None
+            self.sigma = None
             start_time = 0
             end_time = 0
             start_value = 0
