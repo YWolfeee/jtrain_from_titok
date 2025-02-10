@@ -430,7 +430,7 @@ class PolicyNet(nn.Module):
         # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
         if self.model_type == "mlp":
             # batch_size, self.in_channels, self.num_latent_tokens
-            B, C, W = z_embeddings.shape
+            B, _, _ = z_embeddings.shape
             # DEBUG: print("\033[91mCHECK the shape of z_quantized", z_quantized.shape, "\033[0m")
             # z_flattened = rearrange(z_quantized, 'b c w -> b w c').contiguous()
             z_flattened = rearrange(z_embeddings, 'b w c -> (b w) c') # reshape as (b*h*w, c)
@@ -449,8 +449,9 @@ class PolicyNet(nn.Module):
             z_embeddings = z_embeddings + self.positional_embedding
             
             # Apply transformer
-            features = self.transformer(z_embeddings)  # [B, N, D]
-            
+            z_embeddings = z_embeddings.permute(1, 0, 2) # [N, B, D]
+            features = self.transformer(z_embeddings)  # [N, B, D]
+            features = features.permute(1, 0, 2) # [B, N, D]
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
         
@@ -463,7 +464,9 @@ class PolicyNet(nn.Module):
             
             # Apply causal transformer
             causal_mask = torch.triu(torch.ones(N, N), diagonal=1).bool().to(z_embeddings.device)
-            features = self.transformer(z_embeddings, src_mask=causal_mask)  # [B, N, D]
+            z_embeddings = z_embeddings.permute(1, 0, 2) # [N, B, D]
+            features = self.transformer(z_embeddings, src_mask=causal_mask)  # [N, B, D]
+            features = features.permute(1, 0, 2) # [B, N, D]
             
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
