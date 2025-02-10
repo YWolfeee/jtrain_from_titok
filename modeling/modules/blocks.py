@@ -409,7 +409,7 @@ class PolicyNet(nn.Module):
             encoder_layer = nn.TransformerEncoderLayer(
                 d_model=self.in_channels,
                 nhead=self.num_heads,
-                dim_feedforward=self.hidden_size,
+                dim_feedforward=self.in_channels * 4,
                 activation="gelu",
                 batch_first=True,
             )
