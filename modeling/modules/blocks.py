@@ -383,7 +383,7 @@ class TiTokDecoder(nn.Module):
         return x
 
 class PolicyNet(nn.Module):
-    def __init__(self, config, in_channels: int):
+    def __init__(self, config, in_channels: int, num_layers: int = 4):
         super().__init__()
         self.image_size = config.dataset.preprocessing.crop_size
         self.patch_size = config.model.vq_model.vit_dec_patch_size
@@ -402,16 +402,18 @@ class PolicyNet(nn.Module):
 
         elif self.model_type == "transformer" or self.model_type == "causal_transformer":
             self.num_heads = config.model.reconstruction_regularization.policy.num_heads
+            self.num_layers = num_layers
             self.positional_embedding = nn.Parameter(torch.randn(1, self.num_latent_tokens, self.in_channels))
         
             # Single-layer transformer
-            self.transformer = nn.TransformerEncoderLayer(
+            encoder_layer = nn.TransformerEncoderLayer(
                 d_model=self.in_channels,
                 nhead=self.num_heads,
-                dim_feedforward=128,
+                dim_feedforward=self.hidden_size,
                 activation="gelu",
                 batch_first=True,
             )
+            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=self.num_layers)
             
             # Logit prediction
             self.logit_head = nn.Linear(self.in_channels, 1)
