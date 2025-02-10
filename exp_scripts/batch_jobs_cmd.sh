@@ -23,9 +23,8 @@ use_reconstruction_regularization=True
 per_gpu_batch_size=64
 learning_rate=4e-4
 is_increasing=False
-output_root="results_try_distortion_rate_tradeoff_loss"
+output_root="results_try_tradeoff_with_activation"
 policy_network="mlp"
-use_policy_annealing="False"        # We consider softmax instead
 
 # Loop through each YAML file
 for config_file in "${config_files[@]}"; do
@@ -36,25 +35,24 @@ for config_file in "${config_files[@]}"; do
     # for setting in "${settings[@]}"; do
         # Evaluate the settings to create variables dynamically
         # eval $setting
-    # for use_policy_annealing in "True" "False"; do
-    for fix_tau in "True" "False"; do
-        for rate_weight in 0.001 0.005 0.01 0.05 0.1; do
-        # for rate_weight in 0.01 0.05 0.1 0.5; do
-        
-            # for policy_network in "mlp" "transformer"; do
+    for use_gaussian_smoothing in "True" "False"; do
+        for use_T in "True" "False"; do
+            for policy_network in "mlp" "transformer"; do
+                for rate_weight in 0.001 0.005 0.01 0.05 0.1; do    
 
 
-                # Dynamically create the job name
-                jobname="${config_name}+embeddings+use_policy_annealing=${use_policy_annealing}+rate_weight=${rate_weight}+policy_network=${policy_network}+gumbel+fix_tau=${fix_tau}"
+                    # Dynamically create the job name
+                    jobname="gumbel+rate_weight=${rate_weight}+policy_network=${policy_network}+use_gaussian_smoothing=${use_gaussian_smoothing}+use_T=${use_T}"
 
-                echo "jobname = $jobname"
-                # Submit the job
-                command="sbatch --job-name=$jobname --output='$output_root/$jobname/logs/slurm_%j.out' \
-                    exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_policy_annealing $rate_weight $policy_network $fix_tau $output_root"
-                echo "$command"
-                eval "$command"
+                    echo "jobname = $jobname"
+                    # Submit the job
+                    command="sbatch --job-name=$jobname --output='$output_root/$jobname/logs/slurm_%j.out' \
+                        exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_gaussian_smoothing $rate_weight $policy_network $use_T $output_root"
+                    echo "$command"
+                    eval "$command"
                 # exit
-            # done
+                done
+            done
         done
     done
 done

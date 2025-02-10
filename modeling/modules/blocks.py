@@ -418,7 +418,13 @@ class PolicyNet(nn.Module):
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
 
-    def forward(self, z_embeddings, temperature=1.0, gumbel_softmax=None, gaussian_smoothing=None, kernel_size=65, sigma=30.0):
+    def forward(self, 
+                z_embeddings: torch.Tensor, 
+                temperature=1.0, 
+                gumbel_softmax=None, 
+                gaussian_smoothing=None, 
+                annealing_factor=1.0,
+        ):
         # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
         if self.model_type == "mlp":
             # batch_size, self.in_channels, self.num_latent_tokens
@@ -465,8 +471,11 @@ class PolicyNet(nn.Module):
         
         # Gaussian smoothing
         if gaussian_smoothing is not None:
-            logits = apply_gaussian_smoothing(logits, kernel_size, sigma)
+            logits = apply_gaussian_smoothing(logits, gaussian_smoothing.kernel_size, gaussian_smoothing.sigma)
 
+        logits = annealing_factor * logits + \
+            (1-annealing_factor) * logits.detach()
+        
         if gumbel_softmax is not None: # we don't do reinforce
             # This is actually a vector of shape (btz, max_code_length)
             if gumbel_softmax.fix_tau:
