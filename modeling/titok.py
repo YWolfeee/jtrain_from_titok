@@ -235,26 +235,26 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             #     cosine_decay = 0.5 * (1 + math.cos(math.pi * normalized_progress))
             #     self.softmax_temperature = end_value + (start_value - end_value) * cosine_decay
 
-    def set_gaussian_smoothing(self, global_step: int, max_train_steps: int, start_time=0.0, end_time=1.0, end_value=1.0):
+    def set_gaussian_smoothing(self, global_step: int, max_train_steps: int, start_time=0.0, end_time=0.5, end_value=1.0):
         if self.gaussian_smoothing:
             self.gaussian_kernel_size = self.gaussian_smoothing.kernel_size
             start_value = (self.gaussian_kernel_size - 1) // 2
         else:
             self.gaussian_kernel_size = None
-            self.sigma = None
+            self.gaussian_smoothing.sigma = None
             return
 
         progress = global_step / max_train_steps
 
         if progress <= start_time:
-            self.sigma = start_value
+            self.gaussian_smoothing.sigma = start_value
         elif progress >= end_time:
-            self.sigma = end_value
+            self.gaussian_smoothing.sigma = end_value
         else:
             # Cosine annealing
             normalized_progress = (progress - start_time) / (end_time - start_time)
             cosine_decay = 0.5 * (1 + math.cos(math.pi * normalized_progress))
-            self.sigma = end_value + (start_value - end_value) * cosine_decay
+            self.gaussian_smoothing.sigma = end_value + (start_value - end_value) * cosine_decay
 
     def set_policy_annealing_factor(self, global_step: int, max_train_steps: int):
         if self.policy_annealing is None:
@@ -267,7 +267,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
 
             if progress < alpha_start:
                 self.annealing_factor = 0.0 # QY: Default starting alpha value, no actor loss
-            elif progress > alpha_end:
+            elif progress >= alpha_end:
                 self.annealing_factor = 1.0 # QY: Default ending alpha value, emphasize actor loss
             else:
                 normalized_progress = (progress - alpha_start) / (alpha_end - alpha_start)
@@ -287,12 +287,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 result_dict["commitment_loss"] *= 0
                 result_dict["codebook_loss"] *= 0
                 if policy_net:
-                    output_dict = policy_net(z_embedding, 
-                                             temperature=self.softmax_temperature, 
-                                             gumbel_softmax=self.gumbel_softmax,
-                                             gaussian_smoothing=self.gaussian_smoothing,
-                                             kernel_size=self.gaussian_kernel_size,
-                                             sigma=self.sigma)
+                    output_dict = policy_net(
+                        z_embedding, 
+                        temperature=self.softmax_temperature, 
+                        gumbel_softmax=self.gumbel_softmax,
+                        gaussian_smoothing=self.gaussian_smoothing,
+                        annealing_factor=self.annealing_factor,
+                        )
         else:
             z, z_embedding = self.encoder(
                 pixel_values=x, 
@@ -305,12 +306,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 z_quantized = posteriors.sample()
                 result_dict = posteriors
             if policy_net:
-                output_dict = policy_net(z_embedding, 
-                                         temperature=self.softmax_temperature, 
-                                         gumbel_softmax=self.gumbel_softmax,
-                                         gaussian_smoothing=self.gaussian_smoothing,
-                                         kernel_size=self.gaussian_kernel_size,
-                                         sigma=self.sigma)
+                output_dict = policy_net(
+                    z_embedding, 
+                    temperature=self.softmax_temperature, 
+                    gumbel_softmax=self.gumbel_softmax,
+                    gaussian_smoothing=self.gaussian_smoothing,
+                    annealing_factor=self.annealing_factor,
+                    )
 
         if policy_net:
             result_dict.update(output_dict)

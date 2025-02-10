@@ -10,10 +10,10 @@ config_name=$1 # 'titok_l256_4096_12'
 per_gpu_batch_size=$2 # 64
 lr=$3 # 2e-4
 use_reconstruction_regularization=$4 # True
-use_policy_annealing=$5
+use_gaussian_smoothing=$5
 rate_weight=$6
 policy_network=$7
-fix_tau=$8
+use_T=$8
 output_root=$9
 job_name=${10}         # Use as output dir
 
@@ -29,7 +29,7 @@ accelerate launch \
     --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
-    experiment.project="try_distortion_rate_tradeoff_loss" \
+    experiment.project="try_tradeoff_with_activation" \
     experiment.name="${job_name}" \
     experiment.output_dir="${output_root}/${job_name}" \
     model.use_reconstruction_regularization=${use_reconstruction_regularization} \
@@ -49,15 +49,18 @@ accelerate launch \
     model.reconstruction_regularization.policy.use_advantage=True \
     model.reconstruction_regularization.use_gumbel_softmax=True \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
-    model.reconstruction_regularization.gumbel_softmax.fix_tau=${fix_tau} \
+    model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=${use_policy_annealing} \
+    model.reconstruction_regularization.policy.annealing.use_annealing=False \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
-    model.reconstruction_regularization.policy.temperature.use_T=True \
-    model.reconstruction_regularization.policy.temperature.T0=10000 \
+    model.reconstruction_regularization.policy.temperature.use_T=${use_T} \
+    model.reconstruction_regularization.policy.temperature.T0=1000 \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
+    \
+    model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=${use_gaussian_smoothing} \
+    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     training.per_gpu_batch_size=${per_gpu_batch_size} \
     optimizer.params.learning_rate=${lr} \
