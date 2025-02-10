@@ -449,9 +449,9 @@ class PolicyNet(nn.Module):
             z_embeddings = z_embeddings + self.positional_embedding
             
             # Apply transformer
-            z_embeddings = z_embeddings.permute(1, 0, 2) # [N, B, D]
-            features = self.transformer(z_embeddings)  # [N, B, D]
-            features = features.permute(1, 0, 2) # [B, N, D]
+            # z_embeddings = z_embeddings.permute(1, 0, 2) # [N, B, D]
+            features = self.transformer(z_embeddings)  # [B, N, D]
+            # features = features.permute(1, 0, 2) # [B, N, D]
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
         
@@ -464,9 +464,9 @@ class PolicyNet(nn.Module):
             
             # Apply causal transformer
             causal_mask = torch.triu(torch.ones(N, N), diagonal=1).bool().to(z_embeddings.device)
-            z_embeddings = z_embeddings.permute(1, 0, 2) # [N, B, D]
+            # z_embeddings = z_embeddings.permute(1, 0, 2) # [N, B, D]
             features = self.transformer(z_embeddings, src_mask=causal_mask)  # [N, B, D]
-            features = features.permute(1, 0, 2) # [B, N, D]
+            # features = features.permute(1, 0, 2) # [B, N, D]
             
             # Predict logits
             logits = self.logit_head(features).squeeze(-1)  # [B, N]
