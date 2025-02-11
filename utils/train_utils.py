@@ -382,6 +382,9 @@ def train_one_epoch(config, logger, accelerator,
         accelerator.unwrap_model(model).set_gaussian_smoothing(
             global_step, config.training.max_train_steps)
 
+        accelerator.unwrap_model(model).set_training_regime(
+            global_step, config.training.max_train_steps)
+
         with accelerator.accumulate([model, loss_module]):
             reconstructed_images, extra_results_dict = model(images)
             # reconstructed_images.shape: [batch_size, 1024, H, W]
@@ -897,7 +900,7 @@ def eval_loss(
                     extra_results_dict,
                     mode="with_ground_truth"
                 )
-            current_key = f"{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth"
+            current_key = f"{(1 - decode_mask_rates[i]) * 100}%_vs_gt"
             if current_key not in eval_loss_dict:
                 eval_loss_dict[current_key] = []
             eval_loss_dict[current_key].append(accelerator.gather(loss_dict["reconstruction_loss"]))

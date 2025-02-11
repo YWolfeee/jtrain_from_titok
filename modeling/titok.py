@@ -186,6 +186,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.gaussian_smoothing = None
         self.set_gaussian_smoothing(0, config.training.max_train_steps)
         
+        try:
+            tmp = config.model.reconstruction_regularization.policy.training_regime
+            self.training_regime = tmp if tmp.use_training_regime else None
+        except:
+            self.training_regime = None
+        self.set_training_regime(0, config.training.max_train_steps)
+        
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
         # Assume 'self.config' is your DictConfig object
@@ -272,6 +279,90 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             else:
                 normalized_progress = (progress - alpha_start) / (alpha_end - alpha_start)
                 self.annealing_factor = (math.sin(0.5 * math.pi * normalized_progress) ** 2)
+
+    def set_training_regime(self, global_step: int, max_train_steps: int):
+        if self.training_regime is None:
+            return
+
+        training_regime = self.training_regime
+        progress = global_step / max_train_steps
+
+        print("\033[91mmax_train_steps: ", max_train_steps, "\033[0m")
+        print("\033[91mglobal_step: ", global_step, "\033[0m")
+        print("\033[91mfirst_start: ", training_regime.first_start, "\033[0m")
+        print("\033[91msecond_start: ", training_regime.second_start, "\033[0m")
+        
+        assert training_regime.name in ["encoder_then_router_and_decoder", "decoder_then_router_and_encoder"]
+        if training_regime.name == "encoder_then_router_and_decoder":
+            if progress >= training_regime.first_start:
+                # Freeze decoder and policy_net, encoder and latent tokens and quantizer are trainable
+                self.latent_tokens.requires_grad_(True)
+                self.encoder.train()
+                self.encoder.requires_grad_(True)
+                self.quantize.train()
+                self.quantize.requires_grad_(True)
+                self.policy_net.eval()
+                self.policy_net.requires_grad_(False)
+                self.decoder.eval()
+                self.decoder.requires_grad_(False)
+            elif progress >= training_regime.second_start:
+                # Freeze encoder and latent tokens and quantizer, decoder and policy_net are trainable
+                self.latent_tokens.requires_grad_(False)
+                self.encoder.eval()
+                self.encoder.requires_grad_(False)
+                self.quantize.eval()
+                self.quantize.requires_grad_(False)
+                self.policy_net.train()
+                self.policy_net.requires_grad_(True)
+                self.decoder.train()
+                self.decoder.requires_grad_(True)
+            else:
+                # All are trainable
+                self.latent_tokens.requires_grad_(True)
+                self.encoder.train()
+                self.encoder.requires_grad_(True)
+                self.quantize.train()
+                self.quantize.requires_grad_(True)
+                self.policy_net.train()
+                self.policy_net.requires_grad_(True)
+                self.decoder.train()
+                self.decoder.requires_grad_(True)
+        elif training_regime.name == "decoder_then_router_and_encoder":
+            if progress >= training_regime.first_start:
+                # Freeze encoder and latent tokens and quantizer and policy_net, decoder is trainable
+                self.latent_tokens.requires_grad_(False)
+                self.encoder.eval()
+                self.encoder.requires_grad_(False)
+                self.quantize.eval()
+                self.quantize.requires_grad_(False)
+                self.policy_net.eval()
+                self.policy_net.requires_grad_(False)
+                self.decoder.train()
+                self.decoder.requires_grad_(True)
+            elif progress >= training_regime.second_start:
+                # Freeze decoder, encoder and latent tokens and quantizer and policy_net are trainable
+                self.latent_tokens.requires_grad_(True)
+                self.encoder.train()
+                self.encoder.requires_grad_(True)
+                self.quantize.train()
+                self.quantize.requires_grad_(True)
+                self.policy_net.train()
+                self.policy_net.requires_grad_(True)
+                self.decoder.eval()
+                self.decoder.requires_grad_(False)
+            else:
+                # All are trainable
+                self.latent_tokens.requires_grad_(True)
+                self.encoder.train()
+                self.encoder.requires_grad_(True)
+                self.quantize.train()
+                self.quantize.requires_grad_(True)
+                self.policy_net.train()
+                self.policy_net.requires_grad_(True)
+                self.decoder.train()
+                self.decoder.requires_grad_(True)
+        else:
+            raise NotImplementedError(f"Unsupported training regime {training_regime.name}.")
 
     def encode(self, x, policy_net: PolicyNet = None, drop_p=0.0):
         if self.finetune_decoder:
