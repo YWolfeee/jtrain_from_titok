@@ -13,7 +13,7 @@ use_reconstruction_regularization=$4 # True
 use_gaussian_smoothing=$5
 rate_weight=$6
 policy_network=$7
-use_T=$8
+alpha_start=$8
 output_root=$9
 job_name=${10}         # Use as output dir
 
@@ -51,11 +51,11 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=False \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.use_annealing=True \
+    model.reconstruction_regularization.policy.annealing.alpha_start=${alpha_start} \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
-    model.reconstruction_regularization.policy.temperature.use_T=${use_T} \
+    model.reconstruction_regularization.policy.temperature.use_T=False \
     model.reconstruction_regularization.policy.temperature.T0=1000 \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
