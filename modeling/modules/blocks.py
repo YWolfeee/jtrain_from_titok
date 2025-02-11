@@ -383,7 +383,7 @@ class TiTokDecoder(nn.Module):
         return x
 
 class PolicyNet(nn.Module):
-    def __init__(self, config, in_channels: int, num_layers: int = 4):
+    def __init__(self, config, in_channels: int, num_layers: int = 4, mlp_ratio: float = 4.0):
         super().__init__()
         self.image_size = config.dataset.preprocessing.crop_size
         self.patch_size = config.model.vq_model.vit_dec_patch_size
@@ -409,7 +409,7 @@ class PolicyNet(nn.Module):
             encoder_layer = nn.TransformerEncoderLayer(
                 d_model=self.in_channels,
                 nhead=self.num_heads,
-                dim_feedforward=self.in_channels * 4,
+                dim_feedforward=int(self.in_channels * mlp_ratio),
                 activation="gelu",
                 batch_first=True,
             )
