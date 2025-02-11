@@ -24,7 +24,7 @@ per_gpu_batch_size=64
 learning_rate=4e-4
 is_increasing=False
 output_root="results_try_tradeoff_with_activation"
-policy_network="mlp"
+# policy_network="mlp"
 
 # Loop through each YAML file
 for config_file in "${config_files[@]}"; do
@@ -35,19 +35,19 @@ for config_file in "${config_files[@]}"; do
     # for setting in "${settings[@]}"; do
         # Evaluate the settings to create variables dynamically
         # eval $setting
-    for use_gaussian_smoothing in "True" "False"; do
-        for use_T in "True" "False"; do
+    for use_gaussian_smoothing in "True"; do
+        for alpha_start in 0.2 0.4; do
             for policy_network in "mlp" "transformer"; do
-                for rate_weight in 0.001 0.005 0.01 0.05 0.1; do    
+                for rate_weight in 0.001 0.01 0.1 1.0; do    
 
 
                     # Dynamically create the job name
-                    jobname="gumbel+rate_weight=${rate_weight}+policy_network=${policy_network}+use_gaussian_smoothing=${use_gaussian_smoothing}+use_T=${use_T}"
+                    jobname="gumbel+rate_weight=${rate_weight}+policy_network=${policy_network}+use_gaussian_smoothing=${use_gaussian_smoothing}+anneal_policy+alpha_start=${alpha_start}"
 
                     echo "jobname = $jobname"
                     # Submit the job
                     command="sbatch --job-name=$jobname --output='$output_root/$jobname/logs/slurm_%j.out' \
-                        exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_gaussian_smoothing $rate_weight $policy_network $use_T $output_root"
+                        exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_gaussian_smoothing $rate_weight $policy_network $alpha_start $output_root"
                     echo "$command"
                     eval "$command"
                 # exit
