@@ -882,6 +882,11 @@ def eval_loss(
         if pretrained_tokenizer is not None:
             pretrained_tokenizer.eval()
             proxy_codes = pretrained_tokenizer.encode(images)
+        # Track losses for each mask rate per sample
+        sample_losses = []
+        reconstruction_losses = []  # Track reconstruction losses for each rate
+        rate_losses = []  # Track rate losses for each rate
+        
         for i, decode_mask_rate in enumerate(decode_mask_rates):
             reconstructed_images, extra_results_dict = local_model(images, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
             # compare with ground truth
@@ -900,10 +905,51 @@ def eval_loss(
                     extra_results_dict,
                     mode="with_ground_truth"
                 )
+            
+            # Store original metrics
             current_key = f"{(1 - decode_mask_rates[i]) * 100}%_vs_gt"
             if current_key not in eval_loss_dict:
                 eval_loss_dict[current_key] = []
-            eval_loss_dict[current_key].append(accelerator.gather(loss_dict["reconstruction_loss"]))
+            reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss"])
+            rate_loss = loss_module.rate_weight * (1 - decode_mask_rate)
+            total_loss = reconstruction_loss + rate_loss
+            eval_loss_dict[current_key + "_reconstruction_loss"].append(reconstruction_loss)
+            eval_loss_dict[current_key + "_rate_loss"].append(rate_loss)
+            eval_loss_dict[current_key + "_total_loss"].append(total_loss)
+            
+            # Track per-sample losses for finding minimum
+            sample_losses.append(total_loss)
+            reconstruction_losses.append(reconstruction_loss)
+            rate_losses.append(rate_loss)
+
+        # Stack losses to find minimum per sample
+        sample_losses = torch.stack(sample_losses, dim=1) # [B, num_rates]
+        reconstruction_losses = torch.stack(reconstruction_losses, dim=1) # [B, num_rates]
+        rate_losses = torch.stack(rate_losses, dim=1) # [B, num_rates]
+        
+        min_losses, min_indices = torch.min(sample_losses, dim=1) # [B]
+        optimal_rates = torch.tensor(decode_mask_rates, device=min_indices.device)[min_indices]
+        
+        # Get reconstruction and rate losses at optimal points
+        batch_indices = torch.arange(min_indices.size(0), device=min_indices.device)
+        optimal_reconstruction_losses = reconstruction_losses[batch_indices, min_indices]
+        optimal_rate_losses = rate_losses[batch_indices, min_indices]
+
+        # Add minimal loss statistics to eval_dict
+        if "min_loss" not in eval_loss_dict:
+            eval_loss_dict["min_loss"] = []
+        if "optimal_rate" not in eval_loss_dict:
+            eval_loss_dict["optimal_rate"] = []
+        if "optimal_reconstruction_loss" not in eval_loss_dict:
+            eval_loss_dict["optimal_reconstruction_loss"] = []
+        if "optimal_rate_loss" not in eval_loss_dict:
+            eval_loss_dict["optimal_rate_loss"] = []
+            
+        eval_loss_dict["min_loss"].append(min_losses)
+        eval_loss_dict["optimal_rate"].append(optimal_rates)
+        eval_loss_dict["optimal_reconstruction_loss"].append(optimal_reconstruction_losses)
+        eval_loss_dict["optimal_rate_loss"].append(optimal_rate_losses)
+
         t += 1
 
     keys = list(eval_loss_dict.keys())
@@ -915,7 +961,6 @@ def eval_loss(
 
     model.train()
     return eval_loss_dict
-
 
 
 @torch.no_grad()
