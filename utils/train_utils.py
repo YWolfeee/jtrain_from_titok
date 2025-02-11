@@ -382,6 +382,9 @@ def train_one_epoch(config, logger, accelerator,
         accelerator.unwrap_model(model).set_gaussian_smoothing(
             global_step, config.training.max_train_steps)
 
+        accelerator.unwrap_model(model).set_training_regime(
+            global_step, config.training.max_train_steps)
+
         with accelerator.accumulate([model, loss_module]):
             reconstructed_images, extra_results_dict = model(images)
             # reconstructed_images.shape: [batch_size, 1024, H, W]
@@ -879,6 +882,11 @@ def eval_loss(
         if pretrained_tokenizer is not None:
             pretrained_tokenizer.eval()
             proxy_codes = pretrained_tokenizer.encode(images)
+        # Track losses for each mask rate per sample
+        sample_losses = []
+        reconstruction_losses = []  # Track reconstruction losses for each rate
+        rate_losses = []  # Track rate losses for each rate
+        
         for i, decode_mask_rate in enumerate(decode_mask_rates):
             reconstructed_images, extra_results_dict = local_model(images, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
             # compare with ground truth
@@ -897,46 +905,66 @@ def eval_loss(
                     extra_results_dict,
                     mode="with_ground_truth"
                 )
-            current_key = f"{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth"
-            if current_key not in eval_loss_dict:
-                eval_loss_dict[current_key] = accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
-            else:
-                eval_loss_dict[current_key] += accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
-
-            # if i >= 1:
-            #     if proxy_codes is None:
-            #         _, loss_dict = loss_module(
-            #             previous_reconstructed_images,
-            #             reconstructed_images,
-            #             extra_results_dict,
-            #             0, # ignore effect of global_step in this step
-            #             mode="generator",
-            #         )
-            #     else:
-            #         previous_reconstructed_images = previous_reconstructed_images.contiguous()
-            #         previous_reconstructed_images = previous_reconstructed_images.view(previous_reconstructed_images.shape[0], 1024, -1)
-            #         previous_reconstructed_images = previous_reconstructed_images.softmax(dim=1)
-            #         _, loss_dict = loss_module(
-            #             previous_reconstructed_images,
-            #             reconstructed_images,
-            #             extra_results_dict,
-            #             mode="with_self_distilliation"
-            #         )
-            #     current_key = f"{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_{(1 - decode_mask_rates[i-1]) * 100}%_tokens"
-            #     if current_key not in eval_loss_dict:
-            #         eval_loss_dict[current_key] = accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
-            #     else:
-            #         eval_loss_dict[current_key] += accelerator.gather(loss_dict["reconstruction_loss"]).mean().item()
             
-            # previous_reconstructed_images = reconstructed_images
+            # Store original metrics
+            current_key = f"{(1 - decode_mask_rates[i]) * 100}%_vs_gt"
+            # Initialize lists in dict if they don't exist
+            if current_key + "_reconstruction_loss" not in eval_loss_dict:
+                eval_loss_dict[current_key + "_reconstruction_loss"] = []
+            if current_key + "_rate_loss" not in eval_loss_dict:
+                eval_loss_dict[current_key + "_rate_loss"] = []
+            if current_key + "_total_loss" not in eval_loss_dict:
+                eval_loss_dict[current_key + "_total_loss"] = []
+
+            reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss"])
+            rate_loss = loss_module.rate_weight * (1 - decode_mask_rate) * torch.ones_like(reconstruction_loss)
+            total_loss = reconstruction_loss + rate_loss
+            
+            eval_loss_dict[current_key + "_reconstruction_loss"].append(reconstruction_loss)
+            eval_loss_dict[current_key + "_rate_loss"].append(rate_loss) 
+            eval_loss_dict[current_key + "_total_loss"].append(total_loss)
+            
+            # Track per-sample losses for finding minimum
+            sample_losses.append(total_loss)
+            reconstruction_losses.append(reconstruction_loss)
+            rate_losses.append(rate_loss)
+
+        # Stack losses to find minimum per sample
+        sample_losses = torch.stack(sample_losses, dim=1) # [B, num_rates]
+        reconstruction_losses = torch.stack(reconstruction_losses, dim=1) # [B, num_rates]
+        rate_losses = torch.stack(rate_losses, dim=1) # [B, num_rates]
+        
+        min_losses, min_indices = torch.min(sample_losses, dim=1) # [B]
+        
+        # Get reconstruction and rate losses at optimal points
+        batch_indices = torch.arange(min_indices.size(0), device=min_indices.device)
+        optimal_reconstruction_losses = reconstruction_losses[batch_indices, min_indices]
+        optimal_rate_losses = rate_losses[batch_indices, min_indices]
+
+        # Add minimal loss statistics to eval_dict
+        if "optimal_loss" not in eval_loss_dict:
+            eval_loss_dict["optimal_loss"] = []
+        if "optimal_reconstruction_loss" not in eval_loss_dict:
+            eval_loss_dict["optimal_reconstruction_loss"] = []
+        if "optimal_rate_loss" not in eval_loss_dict:
+            eval_loss_dict["optimal_rate_loss"] = []
+            
+        eval_loss_dict["optimal_loss"].append(min_losses)
+        eval_loss_dict["optimal_reconstruction_loss"].append(optimal_reconstruction_losses)
+        eval_loss_dict["optimal_rate_loss"].append(optimal_rate_losses)
+
         t += 1
 
-    for k, v in eval_loss_dict.items():
-        eval_loss_dict[k] = v / sampled_batches
+    keys = list(eval_loss_dict.keys())
+    for key in keys:
+        print("\033[91m", key, ":", eval_loss_dict[key], "\033[0m")
+        losses = torch.cat(eval_loss_dict[key])
+        eval_loss_dict[key + "_mean"] = losses.mean().item()
+        eval_loss_dict[key + "_std"] = losses.std().item()
+        del eval_loss_dict[key]
 
     model.train()
     return eval_loss_dict
-
 
 
 @torch.no_grad()

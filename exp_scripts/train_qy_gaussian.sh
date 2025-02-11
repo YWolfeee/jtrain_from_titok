@@ -1,28 +1,21 @@
-#!/bin/bash
+#PBS -N titok_matryoshka
+#PBS -S /bin/bash
+#PBS -l select=1:ncpus=2:mem=90gb:ngpus=2:host=cvml05
 
-#SBATCH --account=dir_cosmos_misc
-#SBATCH --partition=interactive
-#SBATCH --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training
-#SBATCH --container-image=/lustre/fsw/portfolios/dir/users/haotiany/docker_images/imaginaire4_v9.2.2.sqsh
-#SBATCH --gpus-per-node=8
-#SBATCH --time=4:00:00
+config_name='titok_b64_4096_12'
+model_type='mlp'
+tag='gaussian'
 
 nvidia-smi
-cd /joint_training/jtrain_from_titok
-pwd
+cd ~/jtrain_from_titok
 source ~/.bashrc
-pip install torchinfo
+eval "$(conda shell.bash hook)"
+conda activate titok
 
-config_name='titok_b256_4096_12'
-model_type="mlp"
-tag="try_conv_on_logits_policy_from5k"
-ngpus=8
 export PYTHONPATH=$(pwd)
-
-accelerate launch \
-    --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
+CUDA_VISIBLE_DEVICES=2,3 accelerate launch \
+    --num_machines=1 --num_processes=2 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
-python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
     experiment.name="${config_name}_${tag}" \
@@ -43,32 +36,30 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     model.reconstruction_regularization.policy.use_advantage=True \
-    model.reconstruction_regularization.policy.rate_weight=0.01 \
+    model.reconstruction_regularization.policy.rate_weight=0.001 \
     \
     model.reconstruction_regularization.use_gumbel_softmax=True \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
-    model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
+    model.reconstruction_regularization.gumbel_softmax.fix_tau=True \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=True \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.02 \
+    model.reconstruction_regularization.policy.annealing.use_annealing=False \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.2 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
-    model.reconstruction_regularization.policy.temperature.use_T=False \
+    model.reconstruction_regularization.policy.temperature.use_T=True \
     model.reconstruction_regularization.policy.temperature.T0=10000 \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=True \
-    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=129 \
-    \
-    model.reconstruction_regularization.policy.training_regime.use_training_regime=True \
-    model.reconstruction_regularization.policy.training_regime.name='encoder_then_router_and_decoder' \
-    model.reconstruction_regularization.policy.training_regime.first_start=0.5 \
-    model.reconstruction_regularization.policy.training_regime.second_start=0.75 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.start_time=0.0 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.end_time=1.0 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.start_value=30.0 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.end_value=0.1 \
     \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \
-    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
-    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
-    losses.use_self_distilliation=False
-
+    losses.use_self_distilliation=False \
+    dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar" \
+    dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar" \
