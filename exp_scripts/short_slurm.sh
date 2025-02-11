@@ -60,6 +60,11 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=True \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=129 \
     \
+    model.reconstruction_regularization.policy.training_regime.use_training_regime=True \
+    model.reconstruction_regularization.policy.training_regime.name='encoder_then_router_and_decoder' \
+    model.reconstruction_regularization.policy.training_regime.first_start=0.5 \
+    model.reconstruction_regularization.policy.training_regime.second_start=0.75 \
+    \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \

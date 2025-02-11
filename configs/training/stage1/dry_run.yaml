@@ -4,7 +4,7 @@ experiment:
     output_dir: "dry_run_stage1_run1"
     max_train_examples: 1_281_167
     save_every: 1
-    eval_every: 1
+    eval_every: 2
     eval_loss_every: 1
     generate_every: 1
     log_every: 1
