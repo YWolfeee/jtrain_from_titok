@@ -84,6 +84,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.config = config
         # This should be False for stage1 and True for stage2.
         self.finetune_decoder = config.model.vq_model.get("finetune_decoder", True)
+        # Whether to freeze encoder / decoder during the training
+        self.freeze_encoder = config.model.vq_model.get("freeze_encoder", False)
+        self.freeze_decoder = config.model.vq_model.get("freeze_decoder", False)
 
         self.quantize_mode = config.model.vq_model.get("quantize_mode", "vq")
         if self.quantize_mode not in ["vq", "vae"]:
@@ -139,6 +142,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 "num_res_blocks": 2,
                 "resolution": 256,
                 "z_channels": 256}))
+        
+        elif self.freeze_decoder:
+            self.decoder.eval()
+            self.decoder.requires_grad_(False)
+        elif self.freeze_encoder:
+            self.encoder.eval()
+            self.encoder.requires_grad_(False)
             
         # QY: Add regularization for using partial tokens for reconstruction
         if config.model.use_reconstruction_regularization:
