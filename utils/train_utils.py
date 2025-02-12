@@ -919,7 +919,7 @@ def eval_loss(
             if current_key + "_total_loss" not in eval_loss_dict:
                 eval_loss_dict[current_key + "_total_loss"] = []
 
-            reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss"])
+            reconstruction_loss = accelerator.gather(loss_dict["distortion_loss"])
             rate_loss = loss_module.rate_weight * (1 - decode_mask_rate) * torch.ones_like(reconstruction_loss)
             total_loss = reconstruction_loss + rate_loss
             
@@ -934,6 +934,7 @@ def eval_loss(
 
         # Stack losses to find minimum per sample
         sample_losses = torch.stack(sample_losses, dim=1) # [B, num_rates]
+        print(sample_losses.shape)
         reconstruction_losses = torch.stack(reconstruction_losses, dim=1) # [B, num_rates]
         rate_losses = torch.stack(rate_losses, dim=1) # [B, num_rates]
         
@@ -960,7 +961,7 @@ def eval_loss(
 
     keys = list(eval_loss_dict.keys())
     for key in keys:
-        print("\033[91m", key, ":", eval_loss_dict[key], "\033[0m")
+        # DEBUG: print("\033[91m", key, ":", eval_loss_dict[key], "\033[0m")
         losses = torch.cat(eval_loss_dict[key])
         eval_loss_dict[key + "_mean"] = losses.mean().item()
         eval_loss_dict[key + "_std"] = losses.std().item()
