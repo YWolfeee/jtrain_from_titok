@@ -128,28 +128,29 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
 
             return total_loss, loss_dict
         
-        loss_fct = nn.CrossEntropyLoss(reduction="mean")
+        loss_fct = nn.CrossEntropyLoss(reduction="none")
         batch_size = reconstructions.shape[0]
         if mode == "with_ground_truth":
             # DEBUG: in this case, target_codes is indices of codebook
             # reconstructions.shape: [batch_size, codebook_size, H, W]
             # target_codes.shape: [batch_size, H * W]
             reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
-                                            target_codes.view(batch_size, -1))
+                            target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
         elif mode == "with_self_distilliation":
             # DEBUG: in this case, target_codes is a probability distribution over the codebook size
             # reconstructions.shape: [batch_size, codebook_size, H, W]
             # target_codes.shape: [batch_size, codebook_size, H, W]
             reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
-                                            target_codes.view(batch_size, self.target_codebook_size, -1))
+                                            target_codes.view(batch_size, self.target_codebook_size, -1)).mean(dim=1) # [B,]
         else:
             raise ValueError(f"Unsupported loss mode {mode}")
-        total_loss = reconstruction_loss + \
+        total_loss = reconstruction_loss.mean() + \
             self.quantizer_weight * extra_input_dict["quantizer_loss"]
 
         loss_dict = dict(
             total_loss=total_loss.clone().detach(),
-            reconstruction_loss=reconstruction_loss.detach(),
+            reconstruction_loss=reconstruction_loss.mean().detach(),
+            distortion_loss=reconstruction_loss.detach(),
             quantizer_loss=(self.quantizer_weight * extra_input_dict["quantizer_loss"]).detach(),
             commitment_loss=extra_input_dict["commitment_loss"].detach(),
             codebook_loss=extra_input_dict["codebook_loss"].detach(),
