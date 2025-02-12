@@ -15,7 +15,7 @@ pip install torchinfo
 
 config_name='titok_b256_4096_12'
 model_type="mlp"
-tag="try_conv_on_logits_policy_from5k"
+tag="try_freeze_encoder"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -43,14 +43,17 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     model.reconstruction_regularization.policy.use_advantage=True \
-    model.reconstruction_regularization.policy.rate_weight=0.01 \
+    model.reconstruction_regularization.policy.rate_weight=1 \
+    \
+    model.vq_model.freeze_encoder=True \
+    experiment.init_weight="gumbel+rate_weight=1.0+policy_network=mlp+use_gaussian_smoothing=True+anneal_policy+alpha_start=0.4.bin" \
     \
     model.reconstruction_regularization.use_gumbel_softmax=True \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=True \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.02 \
+    model.reconstruction_regularization.policy.annealing.use_annealing=False \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
     model.reconstruction_regularization.policy.temperature.use_T=False \
@@ -58,12 +61,7 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=True \
-    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=129 \
-    \
-    model.reconstruction_regularization.policy.training_regime.use_training_regime=True \
-    model.reconstruction_regularization.policy.training_regime.name='encoder_then_router_and_decoder' \
-    model.reconstruction_regularization.policy.training_regime.first_start=0.5 \
-    model.reconstruction_regularization.policy.training_regime.second_start=0.75 \
+    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
@@ -72,3 +70,8 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
     losses.use_self_distilliation=False
 
+    # model.reconstruction_regularization.policy.training_regime.use_training_regime=True \
+    # model.reconstruction_regularization.policy.training_regime.name='encoder_then_router_and_decoder' \
+    # model.reconstruction_regularization.policy.training_regime.first_start=0.5 \
+    # model.reconstruction_regularization.policy.training_regime.second_start=0.75 \
+    # \
