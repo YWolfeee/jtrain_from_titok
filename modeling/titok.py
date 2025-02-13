@@ -147,8 +147,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.decoder.eval()
             self.decoder.requires_grad_(False)
         if self.freeze_encoder:
+            self.latent_tokens.requires_grad_(False)
             self.encoder.eval()
             self.encoder.requires_grad_(False)
+            self.quantize.eval()
+            self.quantize.requires_grad_(False)
             
         # QY: Add regularization for using partial tokens for reconstruction
         if config.model.use_reconstruction_regularization:
