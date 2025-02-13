@@ -143,10 +143,10 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 "resolution": 256,
                 "z_channels": 256}))
         
-        elif self.freeze_decoder:
+        if self.freeze_decoder:
             self.decoder.eval()
             self.decoder.requires_grad_(False)
-        elif self.freeze_encoder:
+        if self.freeze_encoder:
             self.encoder.eval()
             self.encoder.requires_grad_(False)
             
@@ -258,7 +258,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             start_value = (self.gaussian_kernel_size - 1) // 2
         else:
             self.gaussian_kernel_size = None
-            self.gaussian_smoothing.sigma = None
             return
 
         progress = global_step / max_train_steps
