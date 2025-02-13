@@ -478,11 +478,18 @@ class PolicyNet(nn.Module):
         if gaussian_smoothing is not None:
             logits = apply_gaussian_smoothing(logits, gaussian_smoothing.kernel_size, gaussian_smoothing.sigma)
 
-        logits = annealing_factor * logits + \
-            (1-annealing_factor) * logits.detach()
+        # Normalize logits
+        try:
+            normalize_logits = self.config.model.reconstruction_regularization.policy.normalize_logits
+        except:
+            normalize_logits = False
+        if normalize_logits:
+            logits = logits - torch.mean(logits, dim=-1, keepdim=True)
         
         if gumbel_softmax is not None: # we don't do reinforce
             # This is actually a vector of shape (btz, max_code_length)
+            logits = annealing_factor * logits + \
+                (1-annealing_factor) * logits.detach()
             if gumbel_softmax.fix_tau:
                 logits /= temperature
                 temperature = 1.0
