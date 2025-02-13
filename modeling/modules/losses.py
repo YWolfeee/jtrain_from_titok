@@ -102,12 +102,27 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 critic_loss = critic_loss.mean()
                 actor_loss = torch.zeros_like(critic_loss)
             else:
-                if self.config.model.reconstruction_regularization.policy.use_advantage:
+                use_advantage = self.config.model.reconstruction_regularization.policy.use_advantage
+                use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
+                assert use_advantage != use_pairwise, "use_advantage and use_pairwise should not be the same"
+                if use_advantage:
                     reward = critic_loss - torch.mean(critic_loss)
                     reward = reward.detach()
+                    actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
+                elif use_pairwise:
+                    other_reconstructions = extra_input_dict["decoded_other"]
+                    other_distortion_loss = loss_fct(other_reconstructions.view(batch_size, self.target_codebook_size, -1),
+                            target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
+                    other_rate_loss = 1 - extra_input_dict["mask_rate_value_other"]
+                    print("/033[91mOther Rate Loss:", other_rate_loss, "/033[0m")
+                    print("/033[91mRate Loss:", rate_loss, "/033[0m")
+                    other_critic_loss = other_distortion_loss + self.rate_weight * other_rate_loss
+                    reward = critic_loss - other_critic_loss
+                    reward = reward.detach()
+                    actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"] / extra_input_dict["prob_of_sampled_mask_rate_other"])
                 else:
                     reward = critic_loss.detach()
-                actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
+                    actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
                 critic_loss = critic_loss.mean()
                 actor_loss = actor_loss.mean()
 

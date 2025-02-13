@@ -541,6 +541,7 @@ def train_one_epoch(config, logger, accelerator,
                     f"Total Loss: {autoencoder_logs['train/total_loss']:0.4f} "
                     f"Recon Loss: {autoencoder_logs['train/reconstruction_loss']:0.4f} "
                     f"Rate Loss: {autoencoder_logs['train/rate_loss']:0.4f} "
+                    f"Actor Loss: {autoencoder_logs['train/actor_loss'] if 'train/actor_loss' in autoencoder_logs else 'N/A':0.4f} "
                     f"Rate Std: {autoencoder_logs['train/rate_std']:0.4f} "
 
                 )
