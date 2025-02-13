@@ -385,6 +385,7 @@ class TiTokDecoder(nn.Module):
 class PolicyNet(nn.Module):
     def __init__(self, config, in_channels: int, num_layers: int = 4, mlp_ratio: float = 4.0):
         super().__init__()
+        self.config = config
         self.image_size = config.dataset.preprocessing.crop_size
         self.patch_size = config.model.vq_model.vit_dec_patch_size
         self.grid_size = self.image_size // self.patch_size
@@ -425,8 +426,12 @@ class PolicyNet(nn.Module):
                 temperature=1.0, 
                 gumbel_softmax=None, 
                 gaussian_smoothing=None, 
-                annealing_factor=1.0,
+                annealing_factor=1.0
         ):
+        try:
+            self.use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
+        except:
+            self.use_pairwise = False
         # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
         if self.model_type == "mlp":
             # batch_size, self.in_channels, self.num_latent_tokens
@@ -509,9 +514,22 @@ class PolicyNet(nn.Module):
             }
         else:
             probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
-            sampled_num = torch.multinomial(probs, num_samples=1)[:, 0]
-            sampled_prob = probs[torch.arange(sampled_num.shape[0]),
+            if not self.use_pairwise or not self.training:
+                sampled_num = torch.multinomial(probs, num_samples=1)[:, 0]
+                sampled_prob = probs[torch.arange(sampled_num.shape[0]),
                                         sampled_num]
+            else:
+                assert probs.shape[0] % 2 == 0, "batch size must be even for pairwise sampling"
+                sampled_num = torch.multinomial(probs[:probs.shape[0]//2], num_samples=2) # shape: (B/2, 2)
+                sampled_prob_1 = probs[torch.arange(sampled_num.shape[0]),
+                                        sampled_num[:, 0]]
+                sampled_prob_2 = probs[torch.arange(sampled_num.shape[0]),
+                                        sampled_num[:, 1]]
+                # stack sampled_num and sampled_prob
+                sampled_num = torch.cat([sampled_num[:, 0], sampled_num[:, 1]], dim=0)
+                sampled_prob = torch.cat([sampled_prob_1, sampled_prob_2], dim=0)
+                # DEBUG: print("/033[91mCHECK sampled_num.shape", sampled_num.shape, "\033[0m")
+                # DEBUG: print("/033[91mCHECK sampled_prob.shape", sampled_prob.shape, "\033[0m")
             mask_rate = 1 - sampled_num / self.num_latent_tokens
 
             return {
