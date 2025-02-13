@@ -36,13 +36,13 @@ for config_file in "${config_files[@]}"; do
         # Evaluate the settings to create variables dynamically
         # eval $setting
     for use_gaussian_smoothing in "True"; do
-        for alpha_start in 0.2 0.4; do
+        for alpha_start in 0.0 0.1 0.2; do
             for policy_network in "mlp" "transformer"; do
-                for rate_weight in 0.001 0.01 0.1 1.0; do    
+                for rate_weight in 0.1 0.5 1; do    
 
 
                     # Dynamically create the job name
-                    jobname="gumbel+rate_weight=${rate_weight}+policy_network=${policy_network}+use_gaussian_smoothing=${use_gaussian_smoothing}+anneal_policy+alpha_start=${alpha_start}"
+                    jobname="pairwise+rate_weight=${rate_weight}+policy_network=${policy_network}+use_gaussian_smoothing=${use_gaussian_smoothing}+anneal_policy+alpha_start=${alpha_start}"
 
                     echo "jobname = $jobname"
                     # Submit the job
