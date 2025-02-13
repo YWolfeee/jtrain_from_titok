@@ -46,6 +46,8 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.rate_weight=0.1 \
     model.reconstruction_regularization.policy.use_pairwise=True \
     \
+    model.reconstruction_regularization.policy.normalize_logits=True \
+    \
     model.vq_model.freeze_encoder=True \
     model.vq_model.freeze_decoder=True \
     experiment.init_weight="titok_b256_4096_12+lr=4e-4+use_ours=True+use_annealing=False+is_increasing=True+use_self_distilliation=False.bin" \
