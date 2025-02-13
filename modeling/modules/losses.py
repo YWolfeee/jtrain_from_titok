@@ -125,7 +125,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                     critic_loss1 = distortion_loss_1 + self.rate_weight * rate_loss_1
                     critic_loss2 = distortion_loss_2 + self.rate_weight * rate_loss_2
                     reward = (critic_loss1 - critic_loss2).detach()
-                    critic_loss = (critic_loss1 + critic_loss2).mean()
+                    critic_loss = (critic_loss1 + critic_loss2).mean() / 2
                     actor_loss = reward * torch.clip(
                         torch.log(prob_of_sampled_mask_rate_1 / prob_of_sampled_mask_rate_2), -10, 10)
 
