@@ -46,8 +46,9 @@ accelerate launch \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
-    model.reconstruction_regularization.policy.use_advantage=True \
-    model.reconstruction_regularization.use_gumbel_softmax=True \
+    model.reconstruction_regularization.policy.use_advantage=False \
+    model.reconstruction_regularization.policy.use_pairwise=True \
+    model.reconstruction_regularization.use_gumbel_softmax=False \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
