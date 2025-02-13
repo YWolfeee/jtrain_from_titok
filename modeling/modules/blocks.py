@@ -429,9 +429,9 @@ class PolicyNet(nn.Module):
                 annealing_factor=1.0
         ):
         try:
-            use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
+            self.use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
         except:
-            use_pairwise = False
+            self.use_pairwise = False
         # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
         if self.model_type == "mlp":
             # batch_size, self.in_channels, self.num_latent_tokens
@@ -514,7 +514,7 @@ class PolicyNet(nn.Module):
             }
         else:
             probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
-            if not use_pairwise or not self.training:
+            if not self.use_pairwise or not self.training:
                 sampled_num = torch.multinomial(probs, num_samples=1)[:, 0]
                 sampled_prob = probs[torch.arange(sampled_num.shape[0]),
                                         sampled_num]
@@ -528,8 +528,8 @@ class PolicyNet(nn.Module):
                 # stack sampled_num and sampled_prob
                 sampled_num = torch.cat([sampled_num[:, 0], sampled_num[:, 1]], dim=0)
                 sampled_prob = torch.cat([sampled_prob_1, sampled_prob_2], dim=0)
-                print("/033[91mCHECK sampled_num.shape", sampled_num.shape, "\033[0m")
-                print("/033[91mCHECK sampled_prob.shape", sampled_prob.shape, "\033[0m")
+                # DEBUG: print("/033[91mCHECK sampled_num.shape", sampled_num.shape, "\033[0m")
+                # DEBUG: print("/033[91mCHECK sampled_prob.shape", sampled_prob.shape, "\033[0m")
             mask_rate = 1 - sampled_num / self.num_latent_tokens
 
             return {
