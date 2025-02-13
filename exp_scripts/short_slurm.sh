@@ -42,13 +42,15 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
-    model.reconstruction_regularization.policy.use_advantage=True \
+    model.reconstruction_regularization.policy.use_advantage=False \
     model.reconstruction_regularization.policy.rate_weight=1 \
+    model.reconstruction_regularization.policy.use_pairwise=True \
     \
     model.vq_model.freeze_encoder=True \
+    model.vq_model.freeze_decoder=True \
     experiment.init_weight="gumbel+rate_weight=1.0+policy_network=mlp+use_gaussian_smoothing=True+anneal_policy+alpha_start=0.4.bin" \
     \
-    model.reconstruction_regularization.use_gumbel_softmax=True \
+    model.reconstruction_regularization.use_gumbel_softmax=False \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
