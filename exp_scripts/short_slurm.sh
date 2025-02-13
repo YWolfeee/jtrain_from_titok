@@ -15,8 +15,8 @@ pip install torchinfo
 
 config_name='titok_b256_4096_12'
 model_type="transformer"
-tag="try_freeze_both_from_elastic_nogaussian_beta=1_transformer"
-ngpus=1
+tag="try_freeze_both_pariwise_nogaussian_beta=0.1_transformer"
+ngpus=8
 export PYTHONPATH=$(pwd)
 
 # accelerate launch \
@@ -43,7 +43,7 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     model.reconstruction_regularization.policy.use_advantage=False \
-    model.reconstruction_regularization.policy.rate_weight=1.0 \
+    model.reconstruction_regularization.policy.rate_weight=0.1 \
     model.reconstruction_regularization.policy.use_pairwise=True \
     \
     model.vq_model.freeze_encoder=True \
@@ -65,7 +65,7 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=False \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
-    training.per_gpu_batch_size=1 \
+    training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \
     dataset.params.num_workers_per_gpu=1 \
@@ -73,8 +73,8 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     dataset.params.eval_shards_path_or_url='small_datasets/imagenet-val-000000.tar' \
     losses.use_self_distilliation=False
 
-    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
-    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
+    # dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
+    # dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
     # model.reconstruction_regularization.policy.training_regime.use_training_regime=True \
     # model.reconstruction_regularization.policy.training_regime.name='encoder_then_router_and_decoder' \
     # model.reconstruction_regularization.policy.training_regime.first_start=0.5 \
