@@ -385,6 +385,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 # check shape of x firstly, repeat x alongside the batch dimension, based on the shape of x
                 x_shape = x.shape
                 x = x.repeat(2, *[1 for _ in range(len(x_shape) - 1)])
+        
         if self.finetune_decoder:
             with torch.no_grad():
                 self.encoder.eval()
@@ -422,7 +423,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                     temperature=self.softmax_temperature, 
                     gumbel_softmax=self.gumbel_softmax,
                     gaussian_smoothing=self.gaussian_smoothing,
-                    annealing_factor=self.annealing_factor,
+                    annealing_factor=self.annealing_factor
                 )
 
         if policy_net:
