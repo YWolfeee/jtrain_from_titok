@@ -93,12 +93,18 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
             loss_fct = nn.CrossEntropyLoss(reduction="none")
             batch_size = reconstructions.shape[0]
             
+            if self.config.model.reconstruction_regularization.policy.use_pairwise:
+                # compute shape of target_codes firstly, then repeat target_codes along the batch dimension as well
+                # since reconstruction loss is computed based on the pair as well
+                target_codes_shape = target_codes.shape
+                target_codes = target_codes.repeat(2, *[1 for _ in range(len(target_codes_shape) - 1)])
+
             distortion_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
                             target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
             rate_loss = 1 - extra_input_dict["mask_rate_value"] # [B,]
-            
-            critic_loss = distortion_loss + self.rate_weight * rate_loss
+               
             if self.config.model.reconstruction_regularization.use_gumbel_softmax: # The reinforce framework
+                critic_loss = distortion_loss + self.rate_weight * rate_loss
                 critic_loss = critic_loss.mean()
                 actor_loss = torch.zeros_like(critic_loss)
             else:
@@ -106,24 +112,25 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
                 assert use_advantage != use_pairwise, "use_advantage and use_pairwise should not be the same"
                 if use_advantage:
+                    critic_loss = distortion_loss + self.rate_weight * rate_loss
                     reward = critic_loss - torch.mean(critic_loss)
                     reward = reward.detach()
                     actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
                 elif use_pairwise:
-                    other_reconstructions = extra_input_dict["decoded_other"]
-                    other_distortion_loss = loss_fct(other_reconstructions.view(batch_size, self.target_codebook_size, -1),
-                            target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
-                    other_rate_loss = 1 - extra_input_dict["mask_rate_value_other"]
-                    # print("/033[91mOther Rate Loss:", other_rate_loss, "/033[0m")
-                    # print("/033[91mRate Loss:", rate_loss, "/033[0m")
-                    other_critic_loss = other_distortion_loss + self.rate_weight * other_rate_loss
-                    reward = critic_loss - other_critic_loss
-                    reward = reward.detach()
-                    actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"] / extra_input_dict["prob_of_sampled_mask_rate_other"])
+                    distortion_loss_1, distortion_loss_2 = distortion_loss.chunk(2)
+                    rate_loss_1, rate_loss_2 = rate_loss.chunk(2)
+                    prob_of_sampled_mask_rate_1, prob_of_sampled_mask_rate_2 = extra_input_dict["prob_of_sampled_mask_rate"].chunk(2)
+                    print("/033[91mRate Loss 1:", rate_loss_1, "/033[0m")
+                    print("/033[91mRate Loss 2:", rate_loss_2, "/033[0m")
+                    critic_loss1 = distortion_loss_1 + self.rate_weight * rate_loss_1
+                    critic_loss2 = distortion_loss_2 + self.rate_weight * rate_loss_2
+                    reward = (critic_loss1 - critic_loss2).detach()
+                    critic_loss = (critic_loss1 + critic_loss2).mean()
+                    actor_loss = reward * torch.log(prob_of_sampled_mask_rate_1 / prob_of_sampled_mask_rate_2)
                 else:
+                    critic_loss = distortion_loss + self.rate_weight * rate_loss
                     reward = critic_loss.detach()
                     actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
-                critic_loss = (critic_loss + other_critic_loss).mean() / 2
                 actor_loss = actor_loss.mean()
 
             total_loss = critic_loss + extra_input_dict["annealing_factor"] * actor_loss + \
