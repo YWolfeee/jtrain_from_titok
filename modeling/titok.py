@@ -374,6 +374,14 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             raise NotImplementedError(f"Unsupported training regime {training_regime.name}.")
 
     def encode(self, x, policy_net: PolicyNet = None, drop_p=0.0):
+        try:
+            use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
+        except:
+            use_pairwise = False
+        if policy_net and use_pairwise and self.training:
+                # check shape of x firstly, repeat x alongside the batch dimension, based on the shape of x
+                x_shape = x.shape
+                x = x.repeat(2, *[1 for _ in range(len(x_shape) - 1)])
         if self.finetune_decoder:
             with torch.no_grad():
                 self.encoder.eval()
@@ -412,17 +420,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                     gumbel_softmax=self.gumbel_softmax,
                     gaussian_smoothing=self.gaussian_smoothing,
                     annealing_factor=self.annealing_factor,
-                    )
-                if self.config.model.reconstruction_regularization.policy.use_pairwise:
-                    other_dict = policy_net(
-                        z_embedding, 
-                        temperature=self.softmax_temperature, 
-                        gumbel_softmax=self.gumbel_softmax,
-                        gaussian_smoothing=self.gaussian_smoothing,
-                        annealing_factor=self.annealing_factor,
-                        )
-                    for key in other_dict.keys():
-                        output_dict[key + "_other"] = other_dict[key]
+                )
 
         if policy_net:
             result_dict.update(output_dict)
@@ -534,9 +532,5 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if self.config.losses.use_self_distilliation:
             result_dict["decode_mask_rate"] = sampled_mask_rate
             result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(sampled_mask_rate), sampled_mask_rate - 1/16)).detach()
-        
-        if self.config.model.reconstruction_regularization.policy.use_pairwise:
-            # decode with different mask rate per sample
-            result_dict["decoded_other"] = self.decode(z_quantized, decode_mask_rate=result_dict["sampled_mask_rate_other"])
-            # result_dict["prob_of_sampled_mask_rate_other"] indicates the probability of the sampled mask rate of the other sampling
+
         return decoded, result_dict
