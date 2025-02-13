@@ -120,13 +120,15 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                     distortion_loss_1, distortion_loss_2 = distortion_loss.chunk(2)
                     rate_loss_1, rate_loss_2 = rate_loss.chunk(2)
                     prob_of_sampled_mask_rate_1, prob_of_sampled_mask_rate_2 = extra_input_dict["prob_of_sampled_mask_rate"].chunk(2)
-                    print("/033[91mRate Loss 1:", rate_loss_1, "/033[0m")
-                    print("/033[91mRate Loss 2:", rate_loss_2, "/033[0m")
+                    # print("/033[91mRate Loss 1:", rate_loss_1, "/033[0m")
+                    # print("/033[91mRate Loss 2:", rate_loss_2, "/033[0m")
                     critic_loss1 = distortion_loss_1 + self.rate_weight * rate_loss_1
                     critic_loss2 = distortion_loss_2 + self.rate_weight * rate_loss_2
                     reward = (critic_loss1 - critic_loss2).detach()
                     critic_loss = (critic_loss1 + critic_loss2).mean()
-                    actor_loss = reward * torch.log(prob_of_sampled_mask_rate_1 / prob_of_sampled_mask_rate_2)
+                    actor_loss = reward * torch.clip(
+                        torch.log(prob_of_sampled_mask_rate_1 / prob_of_sampled_mask_rate_2), -10, 10)
+
                 else:
                     critic_loss = distortion_loss + self.rate_weight * rate_loss
                     reward = critic_loss.detach()
