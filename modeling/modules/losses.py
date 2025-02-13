@@ -114,8 +114,8 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                     other_distortion_loss = loss_fct(other_reconstructions.view(batch_size, self.target_codebook_size, -1),
                             target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
                     other_rate_loss = 1 - extra_input_dict["mask_rate_value_other"]
-                    print("/033[91mOther Rate Loss:", other_rate_loss, "/033[0m")
-                    print("/033[91mRate Loss:", rate_loss, "/033[0m")
+                    # print("/033[91mOther Rate Loss:", other_rate_loss, "/033[0m")
+                    # print("/033[91mRate Loss:", rate_loss, "/033[0m")
                     other_critic_loss = other_distortion_loss + self.rate_weight * other_rate_loss
                     reward = critic_loss - other_critic_loss
                     reward = reward.detach()
@@ -123,7 +123,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 else:
                     reward = critic_loss.detach()
                     actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
-                critic_loss = critic_loss.mean()
+                critic_loss = (critic_loss + other_critic_loss).mean() / 2
                 actor_loss = actor_loss.mean()
 
             total_loss = critic_loss + extra_input_dict["annealing_factor"] * actor_loss + \
