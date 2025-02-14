@@ -31,6 +31,7 @@ from omegaconf import OmegaConf
 from pathlib import Path
 
 from huggingface_hub import PyTorchModelHubMixin
+from transformers import AutoModel
 
 
 class PretrainedTokenizer(nn.Module):
@@ -116,9 +117,15 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             raise NotImplementedError
 
+        self.feature_extractor_name = config.model.reconstruction_regularization.policy.feature_extractor_name # 'facebook/dinov2-base'
+        self.feature_extractor = AutoModel.from_pretrained(self.feature_extractor_name)
+        self.feature_extractor.eval()
+        self.feature_extractor.requires_grad_(False) # OUTPUT SHAPE: [B, 257, 768] for base, [B, 257, 1024] for large
+
         self.policy_net = None
         if self.config.model.reconstruction_regularization.use_policy:
-            self.policy_net = PolicyNet(config, self.encoder.width)
+            # QY: 256 is the number of tokens in the codebook
+            self.policy_net = PolicyNet(config, self.feature_extractor.config.hidden_size, 257)
         
         if self.finetune_decoder:
             # Freeze encoder/quantizer/latent tokens
@@ -165,12 +172,14 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.regularization_name = config.model.reconstruction_regularization.name
         self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
 
+        # Policy (Adaptive Masking or Not)
         try:
             tmp = config.model.reconstruction_regularization.use_policy
             self.use_policy = tmp
         except:
             self.use_policy = False
 
+        # Gumbel-Softmax
         self.gumbel_softmax = None
         try:
             if config.model.reconstruction_regularization.use_gumbel_softmax:
@@ -178,6 +187,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         except:
             self.gumbel_softmax = None
 
+        # Policy annealing on Actor & Critic
         try:
             tmp = config.model.reconstruction_regularization.policy.annealing
             self.policy_annealing = tmp if tmp.use_annealing else None
@@ -185,6 +195,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.policy_annealing = None
         self.set_policy_annealing_factor(0, config.training.max_train_steps)
 
+        # Softmax temperature annealing
         try:
             tmp = config.model.reconstruction_regularization.policy.temperature
             self.softmax_annealing = tmp if tmp.use_T else None
@@ -192,6 +203,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.softmax_annealing = None            
         self.set_policy_softmax_temperature(0, config.training.max_train_steps)
 
+        # Gaussian smoothing on logits
         try:
             tmp = config.model.reconstruction_regularization.policy.gaussian_smoothing
             self.gaussian_smoothing = tmp if tmp.use_gaussian_smoothing else None
@@ -199,12 +211,21 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.gaussian_smoothing = None
         self.set_gaussian_smoothing(0, config.training.max_train_steps)
         
+        # Training regime
         try:
             tmp = config.model.reconstruction_regularization.policy.training_regime
             self.training_regime = tmp if tmp.use_training_regime else None
         except:
             self.training_regime = None
         self.set_training_regime(0, config.training.max_train_steps)
+
+        # Set up gaussian sampling
+        try:
+            tmp = config.model.reconstruction_regularization.policy.gaussian_sampling
+            self.gaussian_sampling = tmp if tmp.use_gaussian_sampling else None
+        except:
+            self.gaussian_sampling = None
+        self.set_gaussian_sampling_sigma(0, config.training.max_train_steps)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -376,7 +397,17 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             raise NotImplementedError(f"Unsupported training regime {training_regime.name}.")
 
-    def encode(self, x, policy_net: PolicyNet = None, drop_p=0.0):
+    def set_gaussian_sampling_sigma(self, global_step: int, max_train_steps: int):
+        if self.gaussian_sampling is None:
+            self.gaussian_sampling_sigma = 1.0
+        else:
+            sigma_0 = self.gaussian_sampling.sigma_0  # e.g., 0.2
+            alpha = self.gaussian_sampling.alpha      # e.g., 1.0
+            self.gaussian_sampling_sigma = 1 + sigma_0 * math.exp(- alpha * global_step)
+
+    def encode(self, x, dino_input=None, policy_net: PolicyNet = None, drop_p=0.0):
+        if dino_input is None:
+            dino_input = torch.nn.functional.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
         try:
             use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
         except:
@@ -385,6 +416,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 # check shape of x firstly, repeat x alongside the batch dimension, based on the shape of x
                 x_shape = x.shape
                 x = x.repeat(2, *[1 for _ in range(len(x_shape) - 1)])
+                dino_input = dino_input.repeat(2, *[1 for _ in range(len(dino_input.shape) - 1)])
+        with torch.no_grad():
+            # DEBUG: print("\033[91mCHECK x.shape", x.shape, "\033[0m")
+            # DEBUG: print("\033[91mCHECK dino_input.shape", dino_input.shape, "\033[0m")
+            token_features= self.feature_extractor(dino_input).last_hidden_state
         
         if self.finetune_decoder:
             with torch.no_grad():
@@ -400,12 +436,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 result_dict["codebook_loss"] *= 0
                 if policy_net:
                     output_dict = policy_net(
-                        z_embedding, 
+                        token_features, 
                         temperature=self.softmax_temperature, 
                         gumbel_softmax=self.gumbel_softmax,
                         gaussian_smoothing=self.gaussian_smoothing,
-                        annealing_factor=self.annealing_factor,
-                        )
+                        gaussian_sampling_sigma=self.gaussian_sampling_sigma,
+                        annealing_factor=self.annealing_factor
+                    )
         else:
             z, z_embedding = self.encoder(
                 pixel_values=x, 
@@ -419,10 +456,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 result_dict = posteriors
             if policy_net:
                 output_dict = policy_net(
-                    z_embedding, 
+                    token_features, 
                     temperature=self.softmax_temperature, 
                     gumbel_softmax=self.gumbel_softmax,
                     gaussian_smoothing=self.gaussian_smoothing,
+                    gaussian_sampling_sigma=self.gaussian_sampling_sigma,
                     annealing_factor=self.annealing_factor
                 )
 
@@ -506,12 +544,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         z_quantized = z_quantized * mask.to(z_quantized.dtype, z_quantized.device)
         return z_quantized
     
-    def forward(self, x, decode_mask_rate=0.0, fixed_mask_rate=False):
+    def forward(self, x, dino_input=None, decode_mask_rate=0.0, fixed_mask_rate=False):
         if not isinstance(decode_mask_rate, float):
             raise ValueError("decode_mask_rate in forward() should be a float")
         
         # Step 1: ENCODE
-        z_quantized, result_dict = self.encode(x, policy_net = self.policy_net)
+        z_quantized, result_dict = self.encode(x, dino_input=dino_input, policy_net = self.policy_net)
 
         # Step 2: MASKING
         if self.config.model.reconstruction_regularization.use_policy and not fixed_mask_rate:

@@ -355,6 +355,9 @@ def train_one_epoch(config, logger, accelerator,
             images = batch["image"].to(
                 accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
             )
+            dino_input = batch["dino_input"].to(
+                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+            )
         else:
             raise ValueError(f"Not found valid keys: {batch.keys()}")
 
@@ -385,8 +388,11 @@ def train_one_epoch(config, logger, accelerator,
         accelerator.unwrap_model(model).set_training_regime(
             global_step, config.training.max_train_steps)
 
+        accelerator.unwrap_model(model).set_gaussian_sampling_sigma(
+            global_step, config.training.max_train_steps)
+
         with accelerator.accumulate([model, loss_module]):
-            reconstructed_images, extra_results_dict = model(images)
+            reconstructed_images, extra_results_dict = model(images, dino_input=dino_input)
             # reconstructed_images.shape: [batch_size, 1024, H, W]
             if proxy_codes is None:
                 autoencoder_loss, loss_dict = loss_module(
@@ -883,6 +889,9 @@ def eval_loss(
         images = batch["image"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
+        dino_input = batch["dino_input"].to(
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+        )
         if pretrained_tokenizer is not None:
             pretrained_tokenizer.eval()
             proxy_codes = pretrained_tokenizer.encode(images)
@@ -892,7 +901,7 @@ def eval_loss(
         rate_losses = []  # Track rate losses for each rate
         
         for i, decode_mask_rate in enumerate(decode_mask_rates):
-            reconstructed_images, extra_results_dict = local_model(images, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
+            reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
             # compare with ground truth
             if proxy_codes is None:
                 _, loss_dict = loss_module(
@@ -997,11 +1006,14 @@ def eval_reconstruction(
         images = batch["image"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
+        dino_input = batch["dino_input"].to(
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+        )
         images_lists = []
         original_images = torch.clone(images)
         original_images = torch.clamp(original_images, 0.0, 1.0)
         for decode_mask_rate in decode_mask_rates:
-            reconstructed_images, model_dict = local_model(images, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
+            reconstructed_images, model_dict = local_model(images, dino_input=dino_input, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
             if pretrained_tokenizer is not None:
                 reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
             reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)

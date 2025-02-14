@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 import einops
+import math
 from einops.layers.torch import Rearrange
 from einops import rearrange
 
@@ -383,30 +384,24 @@ class TiTokDecoder(nn.Module):
         return x
 
 class PolicyNet(nn.Module):
-    def __init__(self, config, in_channels: int, num_layers: int = 4, mlp_ratio: float = 4.0):
+    def __init__(self, config, in_channels, num_tokens, num_layers: int = 4, mlp_ratio: float = 4.0):
         super().__init__()
         self.config = config
-        self.image_size = config.dataset.preprocessing.crop_size
-        self.patch_size = config.model.vq_model.vit_dec_patch_size
-        self.grid_size = self.image_size // self.patch_size
-        self.model_size = config.model.vq_model.vit_dec_model_size
-        self.num_latent_tokens = config.model.vq_model.num_latent_tokens
         self.in_channels = in_channels
+        self.num_tokens = num_tokens
         self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
 
         self.model_type = config.model.reconstruction_regularization.policy.model_type
-        assert self.model_type in ["mlp", "transformer", "causal_transformer"], "model_type must be either mlp / transformer / causal_transformer"
+        assert self.model_type in ["mlp", "transformer", "causal_transformer"], \
+            "model_type must be either mlp / transformer / causal_transformer"
         
         if self.model_type == "mlp":
             self.fc1 = nn.Linear(self.in_channels, self.hidden_size)
-            self.fc2 = nn.Linear(self.hidden_size, 1)
 
         elif self.model_type == "transformer" or self.model_type == "causal_transformer":
             self.num_heads = config.model.reconstruction_regularization.policy.num_heads
             self.num_layers = num_layers
-            self.positional_embedding = nn.Parameter(torch.randn(1, self.num_latent_tokens, self.in_channels))
-        
-            # Single-layer transformer
+            self.positional_embedding = nn.Parameter(torch.randn(1, self.num_tokens, self.in_channels))
             encoder_layer = nn.TransformerEncoderLayer(
                 d_model=self.in_channels,
                 nhead=self.num_heads,
@@ -415,72 +410,61 @@ class PolicyNet(nn.Module):
                 batch_first=True,
             )
             self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=self.num_layers)
-            
-            # Logit prediction
-            self.logit_head = nn.Linear(self.in_channels, 1)
+        
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
 
+        # Logit prediction
+        self.logit_head_type = config.model.reconstruction_regularization.policy.logit_head_type
+        assert self.logit_head_type in ["categorical_256", "categorical_8", "gaussian_1"], \
+            "logit_head must be either categorical_256 / categorical_8 / gaussian_1"
+        if self.logit_head_type == "categorical_256":
+            self.logit_head = nn.Linear(self.in_channels, 256)
+        elif self.logit_head_type == "categorical_8":
+            self.logit_head = nn.Linear(self.in_channels, 8)
+        elif self.logit_head_type == "gaussian_1":
+            self.logit_head = nn.Linear(self.in_channels, 1)
+
     def forward(self, 
-                z_embeddings: torch.Tensor, 
+                token_features: torch.Tensor, 
                 temperature=1.0, 
                 gumbel_softmax=None, 
                 gaussian_smoothing=None, 
-                annealing_factor=1.0
+                annealing_factor=1.0,
+                gaussian_sampling_sigma=1.0
         ):
         try:
             self.use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
         except:
             self.use_pairwise = False
-        # DEBUG: print(f"\033[91mCHECK temperature", temperature, "\033[0m")
-        if self.model_type == "mlp":
-            # batch_size, self.in_channels, self.num_latent_tokens
-            B, _, _ = z_embeddings.shape
-            # DEBUG: print("\033[91mCHECK the shape of z_quantized", z_quantized.shape, "\033[0m")
-            # z_flattened = rearrange(z_quantized, 'b c w -> b w c').contiguous()
-            z_flattened = rearrange(z_embeddings, 'b w c -> (b w) c') # reshape as (b*h*w, c)
-            x = nn.functional.silu(self.fc1(z_flattened))
-            x = self.fc2(x) # (b*w, 1)
-            # reshape back to (b, w)
-            logits = x.reshape(B, -1)
-            # DEBUG: print("\033[91mCHECK the shape of logits", logits.shape, "\033[0m")
-            # apply softmax
         
+        if self.model_type == "mlp":
+            global_token = token_features[:, 0, :] # [B, C]
+            x = nn.functional.gelu(self.fc1(global_token)) # Use the first global token [cls_token]
+            logits = self.logit_head(x)
+
         elif self.model_type == "transformer":
-            B, N, D = z_embeddings.shape
-            # z_quantized = z_quantized.squeeze(2).transpose(1, 2)  # [B, N, D]
-            
-            # Add positional embeddings
-            z_embeddings = z_embeddings + self.positional_embedding
-            
-            # Apply transformer
-            # z_embeddings = z_embeddings.permute(1, 0, 2) # [N, B, D]
-            features = self.transformer(z_embeddings)  # [B, N, D]
-            # features = features.permute(1, 0, 2) # [B, N, D]
-            # Predict logits
-            logits = self.logit_head(features).squeeze(-1)  # [B, N]
+            # DEBUG: print("\033[91mCHECK token_features.shape", token_features.shape, "\033[0m")
+            # DEBUG: print("\033[91mCHECK self.positional_embedding.shape", self.positional_embedding.shape, "\033[0m")
+            token_features = token_features + self.positional_embedding
+            token_features = self.transformer(token_features)  # [B, N, C]
+            global_token = token_features[:, 0, :] # [B, C]
+            logits = self.logit_head(global_token)
         
         elif self.model_type == "causal_transformer":
-            B, N, D = z_embeddings.shape
-            # z_embeddings = z_embeddings.squeeze(2).transpose(1, 2)  # [B, N, D]
-            
-            # Add positional embeddings
-            z_embeddings = z_embeddings + self.positional_embedding
-            
-            # Apply causal transformer
-            causal_mask = torch.triu(torch.ones(N, N), diagonal=1).bool().to(z_embeddings.device)
-            # z_embeddings = z_embeddings.permute(1, 0, 2) # [N, B, D]
-            features = self.transformer(z_embeddings, src_mask=causal_mask)  # [N, B, D]
-            # features = features.permute(1, 0, 2) # [B, N, D]
-            
-            # Predict logits
-            logits = self.logit_head(features).squeeze(-1)  # [B, N]
-        
+            N = token_features.shape[1]
+            token_features = token_features + self.positional_embedding
+            causal_mask = torch.triu(torch.ones(N, N), diagonal=1).bool().to(token_features.device)
+            token_features = self.transformer(token_features, src_mask=causal_mask)  # [N, B, D]
+            global_token = token_features[:, 0, :] # [B, C]
+            logits = self.logit_head(global_token)
+
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
         
         # Gaussian smoothing
         if gaussian_smoothing is not None:
+            # assert self.logit_head_type == "categorical_256", "Gaussian smoothing is only supported for categorical_256"
             logits = apply_gaussian_smoothing(logits, gaussian_smoothing.kernel_size, gaussian_smoothing.sigma)
 
         # Normalize logits
@@ -489,10 +473,19 @@ class PolicyNet(nn.Module):
         except:
             normalize_logits = False
         if normalize_logits:
+            # assert (
+            #     self.logit_head_type == "categorical_256" or 
+            #     self.logit_head_type == "categorical_8"
+            # ), "Normalization is only supported for categorical_256 and categorical_8"
             logits = logits - torch.mean(logits, dim=-1, keepdim=True)
         
-        if gumbel_softmax is not None: # we don't do reinforce
-            # This is actually a vector of shape (btz, max_code_length)
+        # Use [Gumbel Softmax] or [Sampling w/ REINFORCE]
+        if gumbel_softmax is not None: # We don't do reinforce
+            # assert (
+            #     self.logit_head_type == "categorical_256" or 
+            #     self.logit_head_type == "categorical_8"
+            # ), "Gumbel softmax is only supported for categorical_256 and categorical_8"
+            
             logits = annealing_factor * logits + \
                 (1-annealing_factor) * logits.detach()
             if gumbel_softmax.fix_tau:
@@ -512,8 +505,9 @@ class PolicyNet(nn.Module):
                 "sampled_mask_rate": sampled_rate,
                 "mask_rate_value": 1 - sampled_rate.mean(dim=-1)
             }
-        else:
-            probs = torch.nn.functional.softmax(logits / temperature, dim=-1)
+
+        elif self.logit_head_type == "categorical_256" or self.logit_head_type == "categorical_8": # Categorical sampling
+            probs = torch.nn.functional.softmax(logits / temperature, dim=-1) # [B, N]
             if not self.use_pairwise or not self.training:
                 sampled_num = torch.multinomial(probs, num_samples=1)[:, 0]
                 sampled_prob = probs[torch.arange(sampled_num.shape[0]),
@@ -530,13 +524,31 @@ class PolicyNet(nn.Module):
                 sampled_prob = torch.cat([sampled_prob_1, sampled_prob_2], dim=0)
                 # DEBUG: print("/033[91mCHECK sampled_num.shape", sampled_num.shape, "\033[0m")
                 # DEBUG: print("/033[91mCHECK sampled_prob.shape", sampled_prob.shape, "\033[0m")
-            mask_rate = 1 - sampled_num / self.num_latent_tokens
+            mask_rate = 1 - sampled_num / probs.shape[1] # Resolve 8 categories and 256 categories
 
             return {
                 "sampled_mask_rate": mask_rate,
                 "mask_rate_value": mask_rate,
                 "prob_of_sampled_mask_rate": sampled_prob
             }
+
+        elif self.logit_head_type == "gaussian_1": # Gaussian sampling
+            # Reparameterize and sample from Gaussian distribution with std=temperature
+            sampled_from_logits = torch.randn_like(logits) * gaussian_sampling_sigma + logits
+            # Compute the probability of the sampled mask rate based on Gaussian distribution
+            prob_of_sampled_mask_rate = torch.exp(
+                -0.5 * ((sampled_from_logits - logits) / gaussian_sampling_sigma) ** 2
+            ) / (gaussian_sampling_sigma * math.sqrt(2 * math.pi))
+            sampled_rate = torch.sigmoid(sampled_from_logits)[:, 0]
+            sampled_mask_rate = 1 - sampled_rate
+            return {
+                "sampled_mask_rate": sampled_mask_rate,
+                "mask_rate_value": sampled_mask_rate,
+                "prob_of_sampled_mask_rate": prob_of_sampled_mask_rate
+            }
+        else:
+            raise ValueError(f"Invalid logit head type: {self.logit_head_type}")
+
         
 def apply_gaussian_smoothing(logits, kernel_size=64, sigma=5.0):
     """
