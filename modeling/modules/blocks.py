@@ -53,15 +53,17 @@ class ResidualAttentionBlock(nn.Module):
 
     def attention(
             self,
-            x: torch.Tensor
+            x: torch.Tensor,
+            attn_mask: torch.Tensor = None
     ):
-        return self.attn(x, x, x, need_weights=False)[0]
+        return self.attn(x, x, x, need_weights=False, attn_mask=attn_mask)[0]
 
     def forward(
             self,
             x: torch.Tensor,
+            attn_mask: torch.Tensor = None
     ):
-        attn_output = self.attention(x=self.ln_1(x))
+        attn_output = self.attention(x=self.ln_1(x), attn_mask=attn_mask)
         x = x + attn_output
         if self.mlp_ratio > 0:
             x = x + self.mlp(self.ln_2(x))
@@ -257,7 +259,7 @@ class TiTokEncoder(nn.Module):
         self.ln_post = nn.LayerNorm(self.width)
         self.conv_out = nn.Conv2d(self.width, self.token_size, kernel_size=1, bias=True)
 
-    def forward(self, pixel_values, latent_tokens):
+    def forward(self, pixel_values, latent_tokens, attn_mask=None):
         batch_size = pixel_values.shape[0]
         x = pixel_values
         x = self.patch_embed(x)
@@ -266,7 +268,6 @@ class TiTokEncoder(nn.Module):
         # class embeddings and positional embeddings
         x = torch.cat([_expand_token(self.class_embedding, x.shape[0]).to(x.dtype), x], dim=1)
         x = x + self.positional_embedding.to(x.dtype) # shape = [*, grid ** 2 + 1, width]
-        
 
         latent_tokens = _expand_token(latent_tokens, x.shape[0]).to(x.dtype)
         latent_tokens = latent_tokens + self.latent_token_positional_embedding.to(x.dtype)
@@ -275,7 +276,7 @@ class TiTokEncoder(nn.Module):
         x = self.ln_pre(x)
         x = x.permute(1, 0, 2)  # NLD -> LND
         for i in range(self.num_layers):
-            x = self.transformer[i](x)
+            x = self.transformer[i](x, attn_mask=attn_mask)
         x = x.permute(1, 0, 2)  # LND -> NLD
         
         latent_tokens = x[:, 1+self.grid_size**2:]
@@ -355,7 +356,7 @@ class TiTokDecoder(nn.Module):
                     p1 = self.patch_size, p2 = self.patch_size),)
             self.conv_out = nn.Conv2d(3, 3, 3, padding=1, bias=True)
     
-    def forward(self, z_quantized):
+    def forward(self, z_quantized, attn_mask=None):
         N, C, H, W = z_quantized.shape
         assert H == 1 and W == self.num_latent_tokens, f"{H}, {W}, {self.num_latent_tokens}"
         x = z_quantized.reshape(N, C*H, W).permute(0, 2, 1) # NLD
@@ -373,7 +374,7 @@ class TiTokDecoder(nn.Module):
         x = self.ln_pre(x)
         x = x.permute(1, 0, 2)  # NLD -> LND
         for i in range(self.num_layers):
-            x = self.transformer[i](x)
+            x = self.transformer[i](x, attn_mask=attn_mask)
         x = x.permute(1, 0, 2)  # LND -> NLD
         x = x[:, 1:1+self.grid_size**2] # remove cls embed
         x = self.ln_post(x)
