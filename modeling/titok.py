@@ -103,8 +103,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         scale = self.encoder.width ** -0.5
         self.latent_tokens = nn.Parameter(
             scale * torch.randn(self.num_latent_tokens, self.encoder.width))
-        
-        self.apply(self._init_weights)
 
         if self.quantize_mode == "vq":
             self.quantize = VectorQuantizer(
@@ -229,6 +227,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
 
         self.num_of_image_tokens = (config.dataset.preprocessing.crop_size // config.model.vq_model.vit_enc_patch_size) ** 2
         self.num_of_latent_tokens = config.model.vq_model.num_latent_tokens
+
+        self.apply(self._init_weights)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
