@@ -143,6 +143,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
             loss_dict = dict(
                 total_loss=total_loss.clone().detach(),
                 reconstruction_loss=reconstruction_loss.mean().detach(),
+                reconstruction_loss_unreduced=reconstruction_loss.detach(),
                 rate_loss=rate_loss.mean().detach(),
                 rate_std=rate_loss.std().detach(),  # sample wise variance
                 actor_loss=actor_loss.detach(),
@@ -170,6 +171,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
         loss_dict = dict(
             total_loss=total_loss.clone().detach(),
             reconstruction_loss=reconstruction_loss.mean().detach(),
+            reconstruction_loss_unreduced=reconstruction_loss.detach(),
             quantizer_loss=(self.quantizer_weight * extra_input_dict["quantizer_loss"]).detach(),
             commitment_loss=extra_input_dict["commitment_loss"].detach(),
             codebook_loss=extra_input_dict["codebook_loss"].detach(),
