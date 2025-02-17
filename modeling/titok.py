@@ -217,9 +217,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # Set up gaussian sampling
         try:
             tmp = config.model.reconstruction_regularization.policy.gaussian_sampling
-            self.gaussian_sampling = tmp if tmp.use_gaussian_sampling else None
+            logit_head_type = config.model.reconstruction_regularization.policy.logit_head_type
+            self.use_gaussian_sampling = logit_head_type == "gaussian_1"
+            self.gaussian_sampling = tmp if self.use_gaussian_sampling else None
         except:
             self.gaussian_sampling = None
+            self.use_gaussian_sampling = False
         self.set_gaussian_sampling_sigma(0, config.training.max_train_steps)
 
         self.num_of_image_tokens = (config.dataset.preprocessing.crop_size // config.model.vq_model.vit_enc_patch_size) ** 2
@@ -314,12 +317,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 self.annealing_factor = (math.sin(0.5 * math.pi * normalized_progress) ** 2)
 
     def set_gaussian_sampling_sigma(self, global_step: int, max_train_steps: int):
-        if self.gaussian_sampling is None:
-            self.gaussian_sampling_sigma = 0.1
+        progress = global_step / max_train_steps
+        if self.use_gaussian_sampling:
+            self.gaussian_sampling_sigma = 0.03 / (0.03 + progress)
         else:
-            sigma_0 = self.gaussian_sampling.sigma_0  # e.g., 0.2
-            alpha = self.gaussian_sampling.alpha      # e.g., 1.0
-            self.gaussian_sampling_sigma = 0.1 + sigma_0 * math.exp(- alpha * global_step)
+            self.gaussian_sampling_sigma = 1
 
     def create_key_padding_mask(self, mask_rate):
         """
@@ -492,7 +494,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if self.use_policy and not use_fixed_mask_rate:
             # Use policy net to estimate the mask rate
 
-            if self.use_pairwise:
+            if self.use_pairwise and self.training:
                 z_quantized, result_dict = self.encode(
                     torch.concat([x,x]), 
                     torch.concat([token_features, token_features])
