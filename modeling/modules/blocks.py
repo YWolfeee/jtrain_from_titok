@@ -519,14 +519,39 @@ class PolicyNet(nn.Module):
 
         elif self.logit_head_type == "gaussian_1": # Gaussian sampling
 
-            ### Sample then Normalize
-            # Reparameterize and sample from Gaussian distribution with std=temperature
-            sampled_from_logits = torch.randn_like(logits) * gaussian_sampling_sigma + logits
-            # Compute the probability of the sampled mask rate based on Gaussian distribution
-            prob_of_sampled_mask_rate = torch.exp(
-                -0.5 * ((sampled_from_logits - logits) / gaussian_sampling_sigma) ** 2
-            ) / (gaussian_sampling_sigma * math.sqrt(2 * math.pi))
-            sampled_rate = torch.sigmoid(sampled_from_logits)[:, 0]
+            # ### Sample then Normalize
+            # print("\033[91mAlert: Deprecated implementation", "\033[0m")
+            # # Reparameterize and sample from Gaussian distribution with std=temperature
+            # sampled_from_logits = torch.randn_like(logits) * gaussian_sampling_sigma + logits
+            # # Compute the probability of the sampled mask rate based on Gaussian distribution
+            # prob_of_sampled_mask_rate = torch.exp(
+            #     -0.5 * ((sampled_from_logits - logits) / gaussian_sampling_sigma) ** 2
+            # ) / (gaussian_sampling_sigma * math.sqrt(2 * math.pi))
+            # sampled_rate = torch.sigmoid(sampled_from_logits)[:, 0]
+
+            # ### Use truncated normal distribution
+            rate_mean = torch.sigmoid(logits)[:, 0]
+            normal = torch.distributions.Normal(rate_mean, gaussian_sampling_sigma)
+            print("\033[91mCHECK rate_mean", rate_mean, "\033[0m")
+            print("\033[91mCHECK gaussian_sampling_sigma", gaussian_sampling_sigma, "\033[0m")
+    
+            # Convert bounds to tensors on the same device & dtype as mean.
+            a_tensor = torch.tensor(0, dtype=rate_mean.dtype, device=rate_mean.device)
+            b_tensor = torch.tensor(1, dtype=rate_mean.dtype, device=rate_mean.device)
+            
+            # Compute the CDF values at the truncation bounds.
+            cdf_a = normal.cdf(a_tensor)
+            cdf_b = normal.cdf(b_tensor)
+            
+            # Sample uniform values in [cdf_a, cdf_b] for each batch element.
+            u = torch.empty_like(rate_mean).uniform_(0, 1)
+            u_scaled = u * (cdf_b - cdf_a) + cdf_a  # maps to [cdf(a), cdf(b)]
+
+            # Use the inverse CDF (icdf) to obtain the sample.
+            sampled_rate = normal.icdf(u_scaled)
+            prob_of_sampled_mask_rate = normal.log_prob(sampled_rate)
+            print("\033[91mCHECK sampled_rate", sampled_rate, "\033[0m")
+            print("\033[91mCHECK prob_of_sampled_mask_rate", prob_of_sampled_mask_rate, "\033[0m")
 
             sampled_mask_rate = 1 - sampled_rate
             
