@@ -13,7 +13,7 @@ pwd
 source ~/.bashrc
 pip install torchinfo
 
-config_name='titok_b256_4096_12'
+config_name="titok_b256_4096_12"
 model_type="transformer"
 tag="try_pairwise_from_scratch_beta=1_transformer_annealing"
 ngpus=8
@@ -37,7 +37,7 @@ accelerate launch \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
     \
-    model.reconstruction_regularization.use_policy=True \
+    model.reconstruction_regularization.use_policy=False \
     model.reconstruction_regularization.policy.model_type=${model_type} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
@@ -66,9 +66,11 @@ accelerate launch \
     training.max_train_steps=250_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
-    losses.use_self_distilliation=False
+    losses.use_self_distilliation=False \
 
-    # experiment.init_weight="titok_b256_4096_12+lr=4e-4+use_ours=True+use_annealing=False+is_increasing=True+use_self_distilliation=False.bin" \
+
+    # experiment.init_weight="results_try_tradeoff_with_activation/titok+config=titok_b${shape}_4096_12/checkpoint-250000/unwrapped_model/pytorch_model.bin"
+
     # \
     # dataset.params.train_shards_path_or_url='small_datasets/imagenet-train-000000.tar' \
     # dataset.params.eval_shards_path_or_url='small_datasets/imagenet-val-000000.tar' \

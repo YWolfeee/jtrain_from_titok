@@ -540,9 +540,9 @@ def train_one_epoch(config, logger, accelerator,
                     f"Step: {global_step + 1} "
                     f"Total Loss: {autoencoder_logs['train/total_loss']:0.4f} "
                     f"Recon Loss: {autoencoder_logs['train/reconstruction_loss']:0.4f} "
-                    f"Rate Loss: {autoencoder_logs['train/rate_loss']:0.4f} "
-                    f"Actor Loss: {autoencoder_logs['train/actor_loss'] if 'train/actor_loss' in autoencoder_logs else 'N/A':0.4f} "
-                    f"Rate Std: {autoencoder_logs['train/rate_std']:0.4f} "
+                    f"Rate Loss: {autoencoder_logs.get('train/rate_loss', 0.0):0.4f} "
+                    f"Actor Loss: {autoencoder_logs.get('train/actor_loss', 0.0):0.4f} "
+                    f"Rate Std: {autoencoder_logs.get('train/rate_std', 0.0):0.4f} "
 
                 )
                 logs = {
@@ -592,9 +592,9 @@ def train_one_epoch(config, logger, accelerator,
                     # Switch back to the original model parameters for training.
                     ema_model.restore(model.parameters())
 
-            if (global_step + 1) % config.experiment.eval_loss_every == 0:
+            if (global_step + 1) % config.experiment.eval_loss_every == 0 or global_step == 0:
                 logger.info(f"Global step: {global_step + 1}")
-                eval_loss_dict = eval_loss(
+                eval_loss_dict, recon_matrix = eval_loss(
                     model,
                     train_dataloader,
                     accelerator,
@@ -604,6 +604,11 @@ def train_one_epoch(config, logger, accelerator,
                 logger.info(pprint.pformat(eval_loss_dict))
                 eval_loss_log = {f'eval_loss/'+k: v for k, v in eval_loss_dict.items()}
                 accelerator.log(eval_loss_log, step=global_step + 1)
+                import numpy as np
+                recon_matrix = recon_matrix.cpu().numpy()
+                root = Path(config.experiment.output_dir) / "recon_matrix"
+                os.makedirs(root, exist_ok=True)
+                np.save(os.path.join(root, f"recon_matrix-{global_step}.npy"), recon_matrix)
 
             # Evaluate reconstruction.
             if eval_dataloader is not None and (global_step + 1) % config.experiment.eval_every == 0:
@@ -877,6 +882,8 @@ def eval_loss(
     model.eval()
     eval_loss_dict = {}
     t = 0
+    recon_error_matrix = []
+
     for batch in eval_loader:
         if t >= sampled_batches:
             break
@@ -937,6 +944,7 @@ def eval_loss(
         sample_losses = torch.stack(sample_losses, dim=1) # [B, num_rates]
         print(sample_losses.shape)
         reconstruction_losses = torch.stack(reconstruction_losses, dim=1) # [B, num_rates]
+        recon_error_matrix.append(reconstruction_losses)
         rate_losses = torch.stack(rate_losses, dim=1) # [B, num_rates]
         
         min_losses, min_indices = torch.min(sample_losses, dim=1) # [B]
@@ -968,8 +976,12 @@ def eval_loss(
         eval_loss_dict[key + "_std"] = losses.std().item()
         del eval_loss_dict[key]
 
+    # samples * rate
+    recon_error_matrix = torch.concat(recon_error_matrix, dim = 0)
+
+    print(images.mean(), images.median())
     model.train()
-    return eval_loss_dict
+    return eval_loss_dict, recon_error_matrix
 
 
 @torch.no_grad()
