@@ -434,10 +434,6 @@ class PolicyNet(nn.Module):
                 annealing_factor=1.0,
                 gaussian_sampling_sigma=1.0
         ):
-        try:
-            self.use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
-        except:
-            self.use_pairwise = False
         
         if self.model_type == "mlp":
             global_token = token_features[:, 0, :] # [B, C]
@@ -468,17 +464,7 @@ class PolicyNet(nn.Module):
             # assert self.logit_head_type == "categorical_256", "Gaussian smoothing is only supported for categorical_256"
             logits = apply_gaussian_smoothing(logits, gaussian_smoothing.kernel_size, gaussian_smoothing.sigma)
 
-        # Normalize logits
-        try:
-            normalize_logits = self.config.model.reconstruction_regularization.policy.normalize_logits
-        except:
-            normalize_logits = False
-        if normalize_logits:
-            # assert (
-            #     self.logit_head_type == "categorical_256" or 
-            #     self.logit_head_type == "categorical_8"
-            # ), "Normalization is only supported for categorical_256 and categorical_8"
-            logits = logits - torch.mean(logits, dim=-1, keepdim=True)
+        logits = logits - torch.mean(logits, dim=-1, keepdim=True)
         
         # Use [Gumbel Softmax] or [Sampling w/ REINFORCE]
         if gumbel_softmax is not None: # We don't do reinforce
@@ -509,23 +495,21 @@ class PolicyNet(nn.Module):
 
         elif self.logit_head_type == "categorical_256" or self.logit_head_type == "categorical_8": # Categorical sampling
             probs = torch.nn.functional.softmax(logits / temperature, dim=-1) # [B, N]
-            if not self.use_pairwise or not self.training:
-                sampled_num = torch.multinomial(probs, num_samples=1)[:, 0]
-                sampled_prob = probs[torch.arange(sampled_num.shape[0]),
-                                        sampled_num]
-            else:
-                assert probs.shape[0] % 2 == 0, "batch size must be even for pairwise sampling"
-                sampled_num = torch.multinomial(probs[:probs.shape[0]//2], num_samples=2) # shape: (B/2, 2)
-                sampled_prob_1 = probs[torch.arange(sampled_num.shape[0]),
-                                        sampled_num[:, 0]]
-                sampled_prob_2 = probs[torch.arange(sampled_num.shape[0]),
-                                        sampled_num[:, 1]]
-                # stack sampled_num and sampled_prob
-                sampled_num = torch.cat([sampled_num[:, 0], sampled_num[:, 1]], dim=0)
-                sampled_prob = torch.cat([sampled_prob_1, sampled_prob_2], dim=0)
-                # DEBUG: print("/033[91mCHECK sampled_num.shape", sampled_num.shape, "\033[0m")
+            samples = torch.multinomial(probs, num_samples=1)[:, 0]
+            sampled_prob = probs[torch.arange(samples.shape[0]), samples]
+            # else:
+            #     assert probs.shape[0] % 2 == 0, "batch size must be even for pairwise sampling"
+            #     sampled_num = torch.multinomial(probs[:probs.shape[0]//2], num_samples=2) # shape: (B/2, 2)
+            #     sampled_prob_1 = probs[torch.arange(sampled_num.shape[0]),
+            #                             sampled_num[:, 0]]
+            #     sampled_prob_2 = probs[torch.arange(sampled_num.shape[0]),
+            #                             sampled_num[:, 1]]
+            #     # stack sampled_num and sampled_prob
+            #     sampled_num = torch.cat([sampled_num[:, 0], sampled_num[:, 1]], dim=0)
+            #     sampled_prob = torch.cat([sampled_prob_1, sampled_prob_2], dim=0)
+            #     # DEBUG: print("/033[91mCHECK sampled_num.shape", sampled_num.shape, "\033[0m")
                 # DEBUG: print("/033[91mCHECK sampled_prob.shape", sampled_prob.shape, "\033[0m")
-            mask_rate = 1 - (sampled_num + 1) / probs.shape[1] # Resolve 8 categories and 256 categories
+            mask_rate = 1 - (samples + 1) / probs.shape[1] # Resolve 8 categories and 256 categories
 
             return {
                 "sampled_mask_rate": mask_rate,
