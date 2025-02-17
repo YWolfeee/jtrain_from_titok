@@ -120,10 +120,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.feature_extractor.eval()
         self.feature_extractor.requires_grad_(False) # OUTPUT SHAPE: [B, 257, 768] for base, [B, 257, 1024] for large
 
-        self.policy_net = None
-        if self.config.model.reconstruction_regularization.use_policy:
-            # QY: 256 is the number of tokens in the codebook
-            self.policy_net = PolicyNet(config, self.feature_extractor.config.hidden_size, 257)
         
         if self.finetune_decoder:
             # Freeze encoder/quantizer/latent tokens
@@ -132,8 +128,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.encoder.requires_grad_(False)
             self.quantize.eval()
             self.quantize.requires_grad_(False)
-            self.policy_net.eval()
-            self.policy_net.requires_grad_(False)
+            if self.use_policy:
+                self.policy_net.eval()
+                self.policy_net.requires_grad_(False)
 
             # Include MaskGiT-VQGAN's quantizer and decoder
             self.pixel_quantize = Pixel_Quantizer(
@@ -176,6 +173,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.use_policy = tmp
         except:
             self.use_policy = False
+        if self.use_policy:
+            self.policy_net = PolicyNet(config, self.feature_extractor.config.hidden_size, 257)
 
         # Gumbel-Softmax
         self.gumbel_softmax = None
@@ -184,6 +183,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 self.gumbel_softmax = config.model.reconstruction_regularization.gumbel_softmax
         except:
             self.gumbel_softmax = None
+
+        # Pairwise training for REINFORCE
+        try:
+            self.use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
+        except:
+            self.use_pairwise = False
 
         # Policy annealing on Actor & Critic
         try:
@@ -316,7 +321,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             alpha = self.gaussian_sampling.alpha      # e.g., 1.0
             self.gaussian_sampling_sigma = 1 + sigma_0 * math.exp(- alpha * global_step)
 
-    def create_key_padding_mask(self, mask_rate, num_of_image_tokens, num_of_latent_tokens):
+    def create_key_padding_mask(self, mask_rate):
         """
         Create a key_padding_mask for nn.MultiheadAttention.
         For each sample in the batch, the first N1 tokens are always unmasked,
@@ -335,40 +340,22 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         B = mask_rate.shape[0]
         device = mask_rate.device
         
-        mask_first = torch.zeros(B, 1 + num_of_image_tokens, dtype=torch.bool, device=device) # Be aware of [cls_token]
-        indices = torch.arange(num_of_latent_tokens, device=device).unsqueeze(0).expand(B, num_of_latent_tokens)
-        num_unmasked = (num_of_latent_tokens - (mask_rate * num_of_latent_tokens).floor()).to(torch.long).unsqueeze(1)
+        mask_first = torch.zeros(B, 1 + self.num_of_image_tokens, dtype=torch.bool, device=device) # Be aware of [cls_token]
+        indices = torch.arange(self.num_of_latent_tokens, device=device).unsqueeze(0).expand(B, self.num_of_latent_tokens)
+        num_unmasked = (self.num_of_latent_tokens - (mask_rate * self.num_of_latent_tokens).floor()).to(torch.long).unsqueeze(1)
         mask_second = indices >= num_unmasked
         key_padding_mask = torch.cat([mask_first, mask_second], dim=1)
         
         return key_padding_mask
 
-    def encode(self, x, dino_input=None, fixed_mask_rate: torch.Tensor = None, policy_net: PolicyNet = None):
-        # QY: If dino_input is not provided, use the original image to form the DINO input
-        if dino_input is None:
-            print("\033[91mCHECK Not recommended settings: dino_input is None\033[0m")
-            dino_input = torch.nn.functional.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
-        
-        # Pairwise training for REINFORCE
-        try:
-            use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
-        except:
-            use_pairwise = False
-        
-        # Duplicate the input to sample twice on mask rate given an image
-        if policy_net and use_pairwise and self.training:
-            x = x.repeat(2, *[1 for _ in range(len(x.shape) - 1)])
-            dino_input = dino_input.repeat(2, *[1 for _ in range(len(dino_input.shape) - 1)])
-        
-        # Get token features from DINO
-        with torch.no_grad():
-            token_features= self.feature_extractor(dino_input).last_hidden_state
-
+    def encode(self, x, token_features: torch.Tensor, fixed_mask_rate: torch.Tensor = None):
         # Get key padding mask: if fixed mask rate is provided, use it; otherwise, use policy net to get mask rate
         if fixed_mask_rate is not None: # For specific evaluation
-            key_padding_mask = self.create_key_padding_mask(fixed_mask_rate, self.num_of_image_tokens, self.num_of_latent_tokens)
-        elif policy_net: # For training and general evaluation
-            output_dict = policy_net(
+            key_padding_mask = self.create_key_padding_mask(fixed_mask_rate)
+            output_dict = {}
+        elif self.use_policy: # For training and general evaluation
+            # in some cases, the policy_net function is vmap
+            output_dict = self.policy_net(
                 token_features, 
                 temperature=self.softmax_temperature, 
                 gumbel_softmax=self.gumbel_softmax,
@@ -376,7 +363,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 gaussian_sampling_sigma=self.gaussian_sampling_sigma,
                 annealing_factor=self.annealing_factor
             )
-            key_padding_mask = self.create_key_padding_mask(output_dict["sampled_mask_rate"], self.num_of_image_tokens, self.num_of_latent_tokens).to(x.device)
+            key_padding_mask = self.create_key_padding_mask(output_dict["sampled_mask_rate"]).to(x.device)
         else:
             raise ValueError("Either fixed_mask_rate or policy_net must be provided")
 
@@ -384,7 +371,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             with torch.no_grad():  
                 self.encoder.eval()
                 self.quantize.eval()
-                z, z_embedding = self.encoder(
+                z, _ = self.encoder(
                     pixel_values=x, 
                     latent_tokens=self.latent_tokens,
                     key_padding_mask=key_padding_mask
@@ -395,7 +382,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 result_dict["codebook_loss"] *= 0
                 
         else:
-            z, z_embedding = self.encoder(
+            z, _ = self.encoder(
                 pixel_values=x, 
                 latent_tokens=self.latent_tokens,
                 key_padding_mask=key_padding_mask
@@ -407,8 +394,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 z_quantized = posteriors.sample()
                 result_dict = posteriors
 
-        if policy_net:
-            result_dict.update(output_dict)
+        result_dict.update(output_dict)
 
         return z_quantized, result_dict
 
@@ -438,7 +424,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if isinstance(decode_mask_rate, float):
             decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.device).expand(z_quantized.shape[0])
 
-        key_padding_mask = self.create_key_padding_mask(decode_mask_rate, self.num_of_image_tokens, self.num_of_latent_tokens)
+        key_padding_mask = self.create_key_padding_mask(decode_mask_rate)
 
         if len(decode_mask_rate.shape) == 2:
             assert decode_mask_rate.shape[-1] == z_quantized.shape[-1]
@@ -492,17 +478,35 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if not isinstance(fixed_mask_rate_val, float):
             raise ValueError("decode_mask_rate in forward() should be a float")
         
+
+        # QY: If dino_input is not provided, use the original image to form the DINO input
+        if dino_input is None:
+            print("\033[91mCHECK Not recommended settings: dino_input is None\033[0m")
+            dino_input = torch.nn.functional.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
+                
+        # Get token features from DINO
+        with torch.no_grad():
+            token_features = self.feature_extractor(dino_input).last_hidden_state
+
         # Step 1: MASKED ENCODING
-        if self.config.model.reconstruction_regularization.use_policy and not use_fixed_mask_rate:
+        if self.use_policy and not use_fixed_mask_rate:
             # Use policy net to estimate the mask rate
-            z_quantized, result_dict = self.encode(x, dino_input=dino_input, policy_net = self.policy_net)
+
+            if self.use_pairwise:
+                z_quantized, result_dict = self.encode(
+                    torch.concat([x,x]), 
+                    torch.concat([token_features, token_features])
+                )
+            else:
+                z_quantized, result_dict = self.encode(x, token_features)
+
             result_dict["annealing_factor"] = self.annealing_factor
             result_dict["softmax_temperature"] = self.softmax_temperature
             forward_mask_rate = result_dict["sampled_mask_rate"]
 
         else:
             forward_mask_rate = self.get_mask_rate(x, fixed_mask_rate_val)
-            z_quantized, result_dict = self.encode(x, dino_input=dino_input, fixed_mask_rate=forward_mask_rate)
+            z_quantized, result_dict = self.encode(x, token_features, forward_mask_rate)
             result_dict["sampled_mask_rate"] = forward_mask_rate
             result_dict["mask_rate_value"] = forward_mask_rate
         

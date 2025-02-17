@@ -73,6 +73,25 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
         self.rate_weight = config.model.reconstruction_regularization.policy.rate_weight
         self.target_codebook_size = 1024
 
+        # Pairwise training for REINFORCE
+        try:
+            self.use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
+        except:
+            self.use_pairwise = False
+
+        try:
+            self.use_gumbel_softmax = config.model.reconstruction_regularization.use_gumbel_softmax
+        except:
+            self.use_gumbel_softmax = False
+        
+        assert (not self.use_pairwise) or (not self.use_gumbel_softmax), \
+            "use_pairwise and use_gumbel_softmax can not both be True."
+
+        self.loss_fn = nn.CrossEntropyLoss(reduction="none")
+        if self.use_pairwise:
+            # prepare for pairwise computation
+            self.vmap_fn = torch.vmap(self.loss_fn, (0, None)) 
+
     def forward(self,
                 target_codes: torch.Tensor,
                 reconstructions: torch.Tensor,
@@ -89,58 +108,41 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                            ) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
         reconstructions = reconstructions.contiguous()
         if mode == "with_policy":
-            # TODO: CHECK REINFORCE: [critic loss] and [actor loss] should be separated
-            loss_fct = nn.CrossEntropyLoss(reduction="none")
             batch_size = reconstructions.shape[0]
-            
-            if self.config.model.reconstruction_regularization.policy.use_pairwise:
-                # compute shape of target_codes firstly, then repeat target_codes along the batch dimension as well
-                # since reconstruction loss is computed based on the pair as well
-                target_codes_shape = target_codes.shape
-                target_codes = target_codes.repeat(2, *[1 for _ in range(len(target_codes_shape) - 1)])
 
-            distortion_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
-                            target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
+            if self.use_pairwise:
+                target_codes = torch.concat([target_codes, target_codes]) 
+
+            reconstruction_loss = self.loss_fn(
+                reconstructions.view(batch_size, self.target_codebook_size, -1),
+                target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
             rate_loss = 1 - extra_input_dict["mask_rate_value"] # [B,]
                
+            critic_loss = reconstruction_loss + self.rate_weight * rate_loss
+               
             if self.config.model.reconstruction_regularization.use_gumbel_softmax: # The reinforce framework
-                critic_loss = distortion_loss + self.rate_weight * rate_loss
-                critic_loss = critic_loss.mean()
                 actor_loss = torch.zeros_like(critic_loss)
-            else:
-                use_advantage = self.config.model.reconstruction_regularization.policy.use_advantage
-                use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
-                assert use_advantage != use_pairwise, "use_advantage and use_pairwise should not be the same"
-                if use_advantage:
-                    critic_loss = distortion_loss + self.rate_weight * rate_loss
-                    reward = critic_loss - torch.mean(critic_loss)
-                    reward = reward.detach()
-                    actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
-                elif use_pairwise:
-                    distortion_loss_1, distortion_loss_2 = distortion_loss.chunk(2)
-                    rate_loss_1, rate_loss_2 = rate_loss.chunk(2)
-                    prob_of_sampled_mask_rate_1, prob_of_sampled_mask_rate_2 = extra_input_dict["prob_of_sampled_mask_rate"].chunk(2)
-                    # print("/033[91mRate Loss 1:", rate_loss_1, "/033[0m")
-                    # print("/033[91mRate Loss 2:", rate_loss_2, "/033[0m")
-                    critic_loss1 = distortion_loss_1 + self.rate_weight * rate_loss_1
-                    critic_loss2 = distortion_loss_2 + self.rate_weight * rate_loss_2
-                    reward = (critic_loss1 - critic_loss2).detach()
-                    critic_loss = (critic_loss1 + critic_loss2).mean() / 2
-                    actor_loss = reward * torch.clip(
-                        torch.log(prob_of_sampled_mask_rate_1 / prob_of_sampled_mask_rate_2), -10, 10)
+            elif self.use_pairwise:
+                critic_loss1, critic_loss2 = critic_loss.chunk(2)
+                prob1, prob2 = extra_input_dict["prob_of_sampled_mask_rate"].chunk(2)
 
-                else:
-                    critic_loss = distortion_loss + self.rate_weight * rate_loss
-                    reward = critic_loss.detach()
-                    actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
-                actor_loss = actor_loss.mean()
+                reward = (critic_loss1 - critic_loss2).detach()
+                actor_loss = reward * torch.clip(
+                    torch.log(prob1 / prob2), -10, 10)
+
+            else:
+                critic_loss = reconstruction_loss + self.rate_weight * rate_loss
+                reward = critic_loss.detach()
+                actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
+
+            critic_loss, actor_loss = critic_loss.mean(), actor_loss.mean()
 
             total_loss = critic_loss + extra_input_dict["annealing_factor"] * actor_loss + \
             self.quantizer_weight * extra_input_dict["quantizer_loss"]
 
             loss_dict = dict(
                 total_loss=total_loss.clone().detach(),
-                reconstruction_loss=distortion_loss.mean().detach(),
+                reconstruction_loss=reconstruction_loss.mean().detach(),
                 rate_loss=rate_loss.mean().detach(),
                 rate_std=rate_loss.std().detach(),  # sample wise variance
                 actor_loss=actor_loss.detach(),
@@ -152,20 +154,14 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
 
             return total_loss, loss_dict
         
-        loss_fct = nn.CrossEntropyLoss(reduction="none")
         batch_size = reconstructions.shape[0]
         if mode == "with_ground_truth":
             # DEBUG: in this case, target_codes is indices of codebook
             # reconstructions.shape: [batch_size, codebook_size, H, W]
             # target_codes.shape: [batch_size, H * W]
-            reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
-                            target_codes.view(batch_size, -1)).mean(dim=1) # [B,]
-        elif mode == "with_self_distilliation":
-            # DEBUG: in this case, target_codes is a probability distribution over the codebook size
-            # reconstructions.shape: [batch_size, codebook_size, H, W]
-            # target_codes.shape: [batch_size, codebook_size, H, W]
-            reconstruction_loss = loss_fct(reconstructions.view(batch_size, self.target_codebook_size, -1),
-                                            target_codes.view(batch_size, self.target_codebook_size, -1)).mean(dim=1) # [B,]
+            reconstruction_loss = self.loss_fn(reconstructions.view(batch_size, self.target_codebook_size, -1),
+                            target_codes.view(batch_size, -1)).mean(dim=-1) # [B,]
+
         else:
             raise ValueError(f"Unsupported loss mode {mode}")
         total_loss = reconstruction_loss.mean() + \
@@ -174,7 +170,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
         loss_dict = dict(
             total_loss=total_loss.clone().detach(),
             reconstruction_loss=reconstruction_loss.mean().detach(),
-            distortion_loss=reconstruction_loss.detach(),
+            reconstruction_loss=reconstruction_loss.detach(),
             quantizer_loss=(self.quantizer_weight * extra_input_dict["quantizer_loss"]).detach(),
             commitment_loss=extra_input_dict["commitment_loss"].detach(),
             codebook_loss=extra_input_dict["codebook_loss"].detach(),
