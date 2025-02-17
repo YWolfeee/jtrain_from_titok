@@ -896,7 +896,7 @@ def eval_loss(
             if current_key + "_total_loss" not in eval_loss_dict:
                 eval_loss_dict[current_key + "_total_loss"] = []
 
-            reconstruction_loss = accelerator.gather(loss_dict["distortion_loss"])
+            reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss"])
             rate_loss = loss_module.rate_weight * (1 - fixed_mask_rate_val) * torch.ones_like(reconstruction_loss)
             total_loss = reconstruction_loss + rate_loss
             

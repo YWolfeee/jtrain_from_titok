@@ -16,9 +16,10 @@ conda activate titok
 
 export PYTHONPATH=$(pwd)
 export WANDB_INIT_TIMEOUT=300
+
 WANDB_MODE=offline accelerate launch \
     --num_machines=1 --num_processes=2 --machine_rank=0 \
-    --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
+#     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
     experiment.name="${config_name}_${tag}" \
