@@ -18,6 +18,8 @@ from torch.utils.data import Dataset
 import linecache
 import json
 
+from transformers import AutoImageProcessor
+
 
 def filter_keys(key_set):
     def _f(dictionary):
@@ -78,6 +80,14 @@ class ImageTransform:
         print(f"self.eval_transform: {self.eval_transform}")
 
 
+class DinoTransform:
+    def __init__(self):
+        self.processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
+        
+    def dino_transform(self, x):
+        return self.processor(x, return_tensors="pt").pixel_values[0]
+
+
 class SimpleImageDataset:
     def __init__(
         self,
@@ -113,17 +123,20 @@ class SimpleImageDataset:
         transform = ImageTransform(
             resize_shorter_edge, crop_size, random_crop, random_flip,
             normalize_mean, normalize_std)
+        dino_transform = DinoTransform()
 
         train_processing_pipeline = [
             wds.decode(wds.autodecode.ImageHandler("pil", extensions=["webp", "png", "jpg", "jpeg"])),
             wds.rename(
                 image="jpg;png;jpeg;webp",
+                dino_input="jpg;png;jpeg;webp",
                 class_id="cls",
                 handler=wds.warn_and_continue,
                 ),
-            wds.map(filter_keys(set(["image", "class_id", "filename"]))),
+            wds.map(filter_keys(set(["image", "class_id", "filename", "dino_input"]))),
             wds.map_dict(
                 image=transform.train_transform,
+                dino_input=dino_transform.dino_transform,
                 class_id=lambda x: int(x),
                 handler=wds.warn_and_continue,
             ),
@@ -134,11 +147,13 @@ class SimpleImageDataset:
             wds.rename(
                 image="jpg;png;jpeg;webp",
                 class_id="cls",
+                dino_input="jpg;png;jpeg;webp",
                 handler=wds.warn_and_continue,
                 ),
-            wds.map(filter_keys(set(["image", "class_id", "filename"]))),
+            wds.map(filter_keys(set(["image", "class_id", "filename", "dino_input"]))),
             wds.map_dict(
                 image=transform.eval_transform,
+                dino_input=dino_transform.dino_transform,
                 class_id=lambda x: int(x),
                 handler=wds.warn_and_continue,
             ),

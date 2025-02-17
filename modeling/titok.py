@@ -31,6 +31,7 @@ from omegaconf import OmegaConf
 from pathlib import Path
 
 from huggingface_hub import PyTorchModelHubMixin
+from transformers import AutoModel
 
 
 class PretrainedTokenizer(nn.Module):
@@ -102,8 +103,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         scale = self.encoder.width ** -0.5
         self.latent_tokens = nn.Parameter(
             scale * torch.randn(self.num_latent_tokens, self.encoder.width))
-        
-        self.apply(self._init_weights)
 
         if self.quantize_mode == "vq":
             self.quantize = VectorQuantizer(
@@ -116,9 +115,15 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             raise NotImplementedError
 
+        self.feature_extractor_name = config.model.reconstruction_regularization.policy.feature_extractor_name # 'facebook/dinov2-base'
+        self.feature_extractor = AutoModel.from_pretrained(self.feature_extractor_name)
+        self.feature_extractor.eval()
+        self.feature_extractor.requires_grad_(False) # OUTPUT SHAPE: [B, 257, 768] for base, [B, 257, 1024] for large
+
         self.policy_net = None
         if self.config.model.reconstruction_regularization.use_policy:
-            self.policy_net = PolicyNet(config, self.encoder.width)
+            # QY: 256 is the number of tokens in the codebook
+            self.policy_net = PolicyNet(config, self.feature_extractor.config.hidden_size, 257)
         
         if self.finetune_decoder:
             # Freeze encoder/quantizer/latent tokens
@@ -165,12 +170,14 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.regularization_name = config.model.reconstruction_regularization.name
         self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
 
+        # Policy (Adaptive Masking or Not)
         try:
             tmp = config.model.reconstruction_regularization.use_policy
             self.use_policy = tmp
         except:
             self.use_policy = False
 
+        # Gumbel-Softmax
         self.gumbel_softmax = None
         try:
             if config.model.reconstruction_regularization.use_gumbel_softmax:
@@ -178,6 +185,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         except:
             self.gumbel_softmax = None
 
+        # Policy annealing on Actor & Critic
         try:
             tmp = config.model.reconstruction_regularization.policy.annealing
             self.policy_annealing = tmp if tmp.use_annealing else None
@@ -185,6 +193,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.policy_annealing = None
         self.set_policy_annealing_factor(0, config.training.max_train_steps)
 
+        # Softmax temperature annealing
         try:
             tmp = config.model.reconstruction_regularization.policy.temperature
             self.softmax_annealing = tmp if tmp.use_T else None
@@ -192,6 +201,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.softmax_annealing = None            
         self.set_policy_softmax_temperature(0, config.training.max_train_steps)
 
+        # Gaussian smoothing on logits
         try:
             tmp = config.model.reconstruction_regularization.policy.gaussian_smoothing
             self.gaussian_smoothing = tmp if tmp.use_gaussian_smoothing else None
@@ -199,12 +209,26 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             self.gaussian_smoothing = None
         self.set_gaussian_smoothing(0, config.training.max_train_steps)
         
+        # Training regime
         try:
             tmp = config.model.reconstruction_regularization.policy.training_regime
             self.training_regime = tmp if tmp.use_training_regime else None
         except:
             self.training_regime = None
         self.set_training_regime(0, config.training.max_train_steps)
+
+        # Set up gaussian sampling
+        try:
+            tmp = config.model.reconstruction_regularization.policy.gaussian_sampling
+            self.gaussian_sampling = tmp if tmp.use_gaussian_sampling else None
+        except:
+            self.gaussian_sampling = None
+        self.set_gaussian_sampling_sigma(0, config.training.max_train_steps)
+
+        self.num_of_image_tokens = (config.dataset.preprocessing.crop_size // config.model.vq_model.vit_enc_patch_size) ** 2
+        self.num_of_latent_tokens = config.model.vq_model.num_latent_tokens
+
+        self.apply(self._init_weights)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
@@ -376,77 +400,126 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             raise NotImplementedError(f"Unsupported training regime {training_regime.name}.")
 
-    def encode(self, x, policy_net: PolicyNet = None, drop_p=0.0):
+    def set_gaussian_sampling_sigma(self, global_step: int, max_train_steps: int):
+        if self.gaussian_sampling is None:
+            self.gaussian_sampling_sigma = 1.0
+        else:
+            sigma_0 = self.gaussian_sampling.sigma_0  # e.g., 0.2
+            alpha = self.gaussian_sampling.alpha      # e.g., 1.0
+            self.gaussian_sampling_sigma = 1 + sigma_0 * math.exp(- alpha * global_step)
+
+    def create_key_padding_mask(self, mask_rate, num_of_image_tokens, num_of_latent_tokens):
+        """
+        Create a key_padding_mask for nn.MultiheadAttention.
+        For each sample in the batch, the first N1 tokens are always unmasked,
+        while in the second block of N2 tokens, the last int(mask_rate[i] * N2)
+        tokens are masked out.
+
+        Args:
+            mask_rate (Tensor): shape [B,] with values in [0, 1]
+            num_of_image_tokens (int): number of tokens in the first block (always unmasked)
+            num_of_latent_tokens (int): number of tokens in the second block
+
+        Returns:
+            key_padding_mask (Tensor): Boolean tensor of shape [B, N1+N2] where
+                                    True indicates a masked token.
+        """
+        B = mask_rate.shape[0]
+        device = mask_rate.device
+        
+        mask_first = torch.zeros(B, 1 + num_of_image_tokens, dtype=torch.bool, device=device) # Be aware of [cls_token]
+        indices = torch.arange(num_of_latent_tokens, device=device).unsqueeze(0).expand(B, num_of_latent_tokens)
+        num_unmasked = (num_of_latent_tokens - (mask_rate * num_of_latent_tokens).floor()).to(torch.long).unsqueeze(1)
+        mask_second = indices >= num_unmasked
+        key_padding_mask = torch.cat([mask_first, mask_second], dim=1)
+        
+        return key_padding_mask
+
+    def encode(self, x, dino_input=None, fixed_mask_rate: torch.Tensor = None, policy_net: PolicyNet = None):
+        # QY: If dino_input is not provided, use the original image to form the DINO input
+        if dino_input is None:
+            print("\033[91mCHECK Not recommended settings: dino_input is None\033[0m")
+            dino_input = torch.nn.functional.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
+        
+        # Pairwise training for REINFORCE
         try:
             use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
         except:
             use_pairwise = False
-        if policy_net and use_pairwise and self.training:
-                # check shape of x firstly, repeat x alongside the batch dimension, based on the shape of x
-                x_shape = x.shape
-                x = x.repeat(2, *[1 for _ in range(len(x_shape) - 1)])
         
+        # Duplicate the input to sample twice on mask rate given an image
+        if policy_net and use_pairwise and self.training:
+            x = x.repeat(2, *[1 for _ in range(len(x.shape) - 1)])
+            dino_input = dino_input.repeat(2, *[1 for _ in range(len(dino_input.shape) - 1)])
+        
+        # Get token features from DINO
+        with torch.no_grad():
+            token_features= self.feature_extractor(dino_input).last_hidden_state
+
+        # Get key padding mask: if fixed mask rate is provided, use it; otherwise, use policy net to get mask rate
+        if fixed_mask_rate is not None: # For specific evaluation
+            key_padding_mask = self.create_key_padding_mask(fixed_mask_rate, self.num_of_image_tokens, self.num_of_latent_tokens)
+        elif policy_net: # For training and general evaluation
+            output_dict = policy_net(
+                token_features, 
+                temperature=self.softmax_temperature, 
+                gumbel_softmax=self.gumbel_softmax,
+                gaussian_smoothing=self.gaussian_smoothing,
+                gaussian_sampling_sigma=self.gaussian_sampling_sigma,
+                annealing_factor=self.annealing_factor
+            )
+            key_padding_mask = self.create_key_padding_mask(output_dict["sampled_mask_rate"], self.num_of_image_tokens, self.num_of_latent_tokens).to(x.device)
+        else:
+            raise ValueError("Either fixed_mask_rate or policy_net must be provided")
+
         if self.finetune_decoder:
-            with torch.no_grad():
+            with torch.no_grad():  
                 self.encoder.eval()
                 self.quantize.eval()
                 z, z_embedding = self.encoder(
                     pixel_values=x, 
                     latent_tokens=self.latent_tokens,
+                    key_padding_mask=key_padding_mask
                 )
                 z_quantized, result_dict = self.quantize(z)
                 result_dict["quantizer_loss"] *= 0
                 result_dict["commitment_loss"] *= 0
                 result_dict["codebook_loss"] *= 0
-                if policy_net:
-                    output_dict = policy_net(
-                        z_embedding, 
-                        temperature=self.softmax_temperature, 
-                        gumbel_softmax=self.gumbel_softmax,
-                        gaussian_smoothing=self.gaussian_smoothing,
-                        annealing_factor=self.annealing_factor,
-                        )
+                
         else:
             z, z_embedding = self.encoder(
                 pixel_values=x, 
                 latent_tokens=self.latent_tokens,
-                )
+                key_padding_mask=key_padding_mask
+            )
             if self.quantize_mode == "vq":
                 z_quantized, result_dict = self.quantize(z)
             elif self.quantize_mode == "vae":
                 posteriors = self.quantize(z)
                 z_quantized = posteriors.sample()
                 result_dict = posteriors
-            if policy_net:
-                output_dict = policy_net(
-                    z_embedding, 
-                    temperature=self.softmax_temperature, 
-                    gumbel_softmax=self.gumbel_softmax,
-                    gaussian_smoothing=self.gaussian_smoothing,
-                    annealing_factor=self.annealing_factor
-                )
 
         if policy_net:
             result_dict.update(output_dict)
 
         return z_quantized, result_dict
 
-    def get_mask_rate(self, z_quantized, decode_mask_rate=0.0):
-        device = z_quantized.device
+    def get_mask_rate(self, x, decode_mask_rate=0.0):
+        device = x.device
         if self.use_regularization and self.training:
             if self.mask_ratio_method == "uniform":
-                mask_rate = torch.empty(z_quantized.shape[0], device=device).uniform_(0, self.max_mask_rate - 1e-3)
+                mask_rate = torch.empty(x.shape[0], device=device).uniform_(0, self.max_mask_rate - 1e-3)
             elif self.mask_ratio_method == "hierarchical":
                 values = torch.tensor([i / 16 for i in range(16)], device=device)  # we do not consider zero-token setting
                 import math
                 upper_bound = math.ceil(self.max_mask_rate * values.shape[0])
                 upper_bound = 1 if upper_bound == 0 else upper_bound
-                indices = torch.randint(0, upper_bound, (z_quantized.shape[0],), device=device)
+                indices = torch.randint(0, upper_bound, (x.shape[0],), device=device)
                 mask_rate = values[indices]
             else:
                 raise NotImplementedError(f"Unsupported mask ratio method {self.mask_ratio_method}.")
         else:
-            mask_rate = torch.tensor(decode_mask_rate, device=device).expand(z_quantized.shape[0])
+            mask_rate = torch.tensor(decode_mask_rate, device=device).expand(x.shape[0])
 
         return mask_rate
     
@@ -457,12 +530,13 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if isinstance(decode_mask_rate, float):
             decode_mask_rate = torch.tensor(decode_mask_rate, device=z_quantized.device).expand(z_quantized.shape[0])
 
+        key_padding_mask = self.create_key_padding_mask(decode_mask_rate, self.num_of_image_tokens, self.num_of_latent_tokens)
+
         if len(decode_mask_rate.shape) == 2:
             assert decode_mask_rate.shape[-1] == z_quantized.shape[-1]
             z_quantized = decode_mask_rate[:, None, None] * z_quantized
         else:
-            # mask rate is a tensor with shape (batch_size,)
-            # values could be identical inside
+            # mask rate: [B,]
             if self.regularization_name == "matryoshka":
                 z_quantized = self.matryoshka_masking(z_quantized, mask_rate=decode_mask_rate)
             elif self.regularization_name == "random":
@@ -472,7 +546,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             else:
                 raise NotImplementedError(f"Unsupported reconstruction regularization {self.reconstruction_regularization}.")
         # z_quantized.shape: [batch_size, token_dim, 1, num_tokens]
-        decoded = self.decoder(z_quantized)
+        decoded = self.decoder(z_quantized, key_padding_mask=key_padding_mask)
         if self.finetune_decoder:
             quantized_states = torch.einsum(
                 'nchw,cd->ndhw', decoded.softmax(1),
@@ -506,35 +580,25 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         z_quantized = z_quantized * mask.to(z_quantized.dtype, z_quantized.device)
         return z_quantized
     
-    def forward(self, x, decode_mask_rate=0.0, fixed_mask_rate=False):
-        if not isinstance(decode_mask_rate, float):
+    def forward(self, x, dino_input=None, fixed_mask_rate_val=0.0, use_fixed_mask_rate=False):
+        if not isinstance(fixed_mask_rate_val, float):
             raise ValueError("decode_mask_rate in forward() should be a float")
         
-        # Step 1: ENCODE
-        z_quantized, result_dict = self.encode(x, policy_net = self.policy_net)
-
-        # Step 2: MASKING
-        if self.config.model.reconstruction_regularization.use_policy and not fixed_mask_rate:
-            # if using policy, instead of using random mask rate for training, we use the policy to estimate the mask rate
-            # Notice that this process has been put in the self.encode function
-
-            # add additional parameters for printing
+        # Step 1: MASKED ENCODING
+        if self.config.model.reconstruction_regularization.use_policy and not use_fixed_mask_rate:
+            # Use policy net to estimate the mask rate
+            z_quantized, result_dict = self.encode(x, dino_input=dino_input, policy_net = self.policy_net)
             result_dict["annealing_factor"] = self.annealing_factor
             result_dict["softmax_temperature"] = self.softmax_temperature
-            sampled_mask_rate = result_dict["sampled_mask_rate"]
+            forward_mask_rate = result_dict["sampled_mask_rate"]
 
         else:
-            sampled_mask_rate= self.get_mask_rate(z_quantized, decode_mask_rate)
-            result_dict["sampled_mask_rate"] = sampled_mask_rate
-            result_dict["mask_rate_value"] = sampled_mask_rate
+            forward_mask_rate = self.get_mask_rate(x, fixed_mask_rate_val)
+            z_quantized, result_dict = self.encode(x, dino_input=dino_input, fixed_mask_rate=forward_mask_rate)
+            result_dict["sampled_mask_rate"] = forward_mask_rate
+            result_dict["mask_rate_value"] = forward_mask_rate
         
-        # STEP 3: DECODE
-        decoded = self.decode(z_quantized, decode_mask_rate=sampled_mask_rate)
-        # DEBUG: If use self-distill, the decode_mask_rate should be used to determine which part corresponds to ground truth (if some is less than 1/16)
-        #        The self-distilliated codes are later used to compute the loss, we detach them to avoid back-propagation on decoder twice
-        #        The decode_mask_rate is correct in dry_run
-        if self.config.losses.use_self_distilliation:
-            result_dict["decode_mask_rate"] = sampled_mask_rate
-            result_dict["self_distilliated_codes"] = self.decode(z_quantized, torch.maximum(torch.zeros_like(sampled_mask_rate), sampled_mask_rate - 1/16)).detach()
+        # STEP 2: MASKED DECODING
+        decoded = self.decode(z_quantized, decode_mask_rate=forward_mask_rate)
 
         return decoded, result_dict

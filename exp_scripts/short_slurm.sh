@@ -53,6 +53,11 @@ accelerate launch \
     model.reconstruction_regularization.policy.annealing.use_annealing=True \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
+    model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
+    model.reconstruction_regularization.policy.logit_head_type="categorical_8" \
+    model.reconstruction_regularization.policy.gaussian_sampling.use_gaussian_sampling=False \
+    model.reconstruction_regularization.policy.gaussian_sampling.sigma_0=10 \
+    model.reconstruction_regularization.policy.gaussian_sampling.alpha=1e-4 \
     \
     model.reconstruction_regularization.policy.temperature.use_T=False \
     model.reconstruction_regularization.policy.temperature.T0=10000 \
