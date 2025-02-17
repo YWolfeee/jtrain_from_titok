@@ -388,9 +388,6 @@ def train_one_epoch(config, logger, accelerator,
         local_model.set_gaussian_smoothing(
             global_step, config.training.max_train_steps)
 
-        local_model.set_training_regime(
-            global_step, config.training.max_train_steps)
-
         local_model.set_gaussian_sampling_sigma(
             global_step, config.training.max_train_steps)
 

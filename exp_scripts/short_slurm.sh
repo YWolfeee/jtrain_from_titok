@@ -79,8 +79,3 @@ accelerate launch \
     # \
     # dataset.params.train_shards_path_or_url='small_datasets/imagenet-train-000000.tar' \
     # dataset.params.eval_shards_path_or_url='small_datasets/imagenet-val-000000.tar' \
-    # model.reconstruction_regularization.policy.training_regime.use_training_regime=True \
-    # model.reconstruction_regularization.policy.training_regime.name='encoder_then_router_and_decoder' \
-    # model.reconstruction_regularization.policy.training_regime.first_start=0.5 \
-    # model.reconstruction_regularization.policy.training_regime.second_start=0.75 \
-    # \
