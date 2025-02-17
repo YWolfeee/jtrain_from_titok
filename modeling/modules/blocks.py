@@ -535,25 +535,17 @@ class PolicyNet(nn.Module):
 
         elif self.logit_head_type == "gaussian_1": # Gaussian sampling
 
-            # ### Sample then Normalize
-            # # Reparameterize and sample from Gaussian distribution with std=temperature
-            # sampled_from_logits = torch.randn_like(logits) * gaussian_sampling_sigma + logits
-            # # Compute the probability of the sampled mask rate based on Gaussian distribution
-            # prob_of_sampled_mask_rate = torch.exp(
-            #     -0.5 * ((sampled_from_logits - logits) / gaussian_sampling_sigma) ** 2
-            # ) / (gaussian_sampling_sigma * math.sqrt(2 * math.pi))
-            # sampled_rate = torch.sigmoid(sampled_from_logits)[:, 0]
-
-            ### Normalize then Sample
-            gaussian_mean = torch.sigmoid(logits)[:, 0]
-            gaussian_std = gaussian_sampling_sigma
-            sampled_rate = torch.randn_like(gaussian_mean) * gaussian_std + gaussian_mean
-            if sampled_rate > 1.0:
-                sampled_rate = sampled_rate / sampled_rate.detach()
-            elif sampled_rate < 0.0:
-                sampled_rate = sampled_rate - sampled_rate.detach()
+            ### Sample then Normalize
+            # Reparameterize and sample from Gaussian distribution with std=temperature
+            sampled_from_logits = torch.randn_like(logits) * gaussian_sampling_sigma + logits
+            # Compute the probability of the sampled mask rate based on Gaussian distribution
+            prob_of_sampled_mask_rate = torch.exp(
+                -0.5 * ((sampled_from_logits - logits) / gaussian_sampling_sigma) ** 2
+            ) / (gaussian_sampling_sigma * math.sqrt(2 * math.pi))
+            sampled_rate = torch.sigmoid(sampled_from_logits)[:, 0]
 
             sampled_mask_rate = 1 - sampled_rate
+            
             return {
                 "sampled_mask_rate": sampled_mask_rate,
                 "mask_rate_value": sampled_mask_rate,
