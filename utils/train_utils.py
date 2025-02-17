@@ -347,12 +347,17 @@ def train_one_epoch(config, logger, accelerator,
     batch = next(iter(train_eval_dataloader))
     log_images = batch["image"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
     log_images = log_images[:config.training.num_generated_images]
+    log_dino_input = batch["dino_input"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
+    log_dino_input = log_dino_input[:config.training.num_generated_images]
     log_fnames = batch["__key__"][:config.training.num_generated_images]
 
     for i, batch in enumerate(train_dataloader):
         model.train()
         if "image" in batch:
             images = batch["image"].to(
+                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+            )
+            dino_input = batch["dino_input"].to(
                 accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
             )
         else:
@@ -368,25 +373,29 @@ def train_one_epoch(config, logger, accelerator,
         else:
             proxy_codes = None
 
+        local_model = accelerator.unwrap_model(model)
         # QY: Update max mask rate based on annealing schedule if configured
         if config.model.reconstruction_regularization.use_annealing:
             max_mask_rate = get_titok_max_mask_rate(config, global_step)
-            accelerator.unwrap_model(model).set_max_mask_rate(max_mask_rate)
+            local_model.set_max_mask_rate(max_mask_rate)
 
-        accelerator.unwrap_model(model).set_policy_annealing_factor(
+        local_model.set_policy_annealing_factor(
             global_step, config.training.max_train_steps)
 
-        accelerator.unwrap_model(model).set_policy_softmax_temperature(
+        local_model.set_policy_softmax_temperature(
             global_step, config.training.max_train_steps)
         
-        accelerator.unwrap_model(model).set_gaussian_smoothing(
+        local_model.set_gaussian_smoothing(
             global_step, config.training.max_train_steps)
 
-        accelerator.unwrap_model(model).set_training_regime(
+        local_model.set_training_regime(
+            global_step, config.training.max_train_steps)
+
+        local_model.set_gaussian_sampling_sigma(
             global_step, config.training.max_train_steps)
 
         with accelerator.accumulate([model, loss_module]):
-            reconstructed_images, extra_results_dict = model(images)
+            reconstructed_images, extra_results_dict = model(images, dino_input=dino_input)
             # reconstructed_images.shape: [batch_size, 1024, H, W]
             if proxy_codes is None:
                 autoencoder_loss, loss_dict = loss_module(
@@ -579,6 +588,7 @@ def train_one_epoch(config, logger, accelerator,
                 reconstruct_images(
                     model,
                     log_images,
+                    log_dino_input,
                     log_fnames,
                     accelerator,
                     global_step + 1,
@@ -879,7 +889,7 @@ def eval_loss(
 ):
     decode_mask_rates = [i / 16 for i in range(16)]
     local_model = accelerator.unwrap_model(model)
-    model.eval()
+    local_model.eval()
     eval_loss_dict = {}
     t = 0
     recon_error_matrix = []
@@ -890,6 +900,9 @@ def eval_loss(
         images = batch["image"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
+        dino_input = batch["dino_input"].to(
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+        )
         if pretrained_tokenizer is not None:
             pretrained_tokenizer.eval()
             proxy_codes = pretrained_tokenizer.encode(images)
@@ -898,8 +911,8 @@ def eval_loss(
         reconstruction_losses = []  # Track reconstruction losses for each rate
         rate_losses = []  # Track rate losses for each rate
         
-        for i, decode_mask_rate in enumerate(decode_mask_rates):
-            reconstructed_images, extra_results_dict = local_model(images, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
+        for i, fixed_mask_rate_val in enumerate(decode_mask_rates):
+            reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True)
             # compare with ground truth
             if proxy_codes is None:
                 _, loss_dict = loss_module(
@@ -928,7 +941,7 @@ def eval_loss(
                 eval_loss_dict[current_key + "_total_loss"] = []
 
             reconstruction_loss = accelerator.gather(loss_dict["distortion_loss"])
-            rate_loss = loss_module.rate_weight * (1 - decode_mask_rate) * torch.ones_like(reconstruction_loss)
+            rate_loss = loss_module.rate_weight * (1 - fixed_mask_rate_val) * torch.ones_like(reconstruction_loss)
             total_loss = reconstruction_loss + rate_loss
             
             eval_loss_dict[current_key + "_reconstruction_loss"].append(reconstruction_loss)
@@ -1002,18 +1015,21 @@ def eval_reconstruction(
     for evaluator in evaluators:
         evaluator.reset_metrics()
     local_model = accelerator.unwrap_model(model)
-
+    local_model.eval()
     decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
 
     for batch in eval_loader:
         images = batch["image"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
+        dino_input = batch["dino_input"].to(
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+        )
         images_lists = []
         original_images = torch.clone(images)
         original_images = torch.clamp(original_images, 0.0, 1.0)
-        for decode_mask_rate in decode_mask_rates:
-            reconstructed_images, model_dict = local_model(images, decode_mask_rate=decode_mask_rate, fixed_mask_rate=True)
+        for fixed_mask_rate_val in decode_mask_rates:
+            reconstructed_images, model_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True)
             if pretrained_tokenizer is not None:
                 reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
             reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
@@ -1029,11 +1045,12 @@ def eval_reconstruction(
 
 
 @torch.no_grad()
-def reconstruct_images(model, original_images, fnames, accelerator, 
+def reconstruct_images(model, original_images, dino_input, fnames, accelerator, 
                     global_step, output_dir, logger, config=None,
                     pretrained_tokenizer=None):
     logger.info("Reconstructing images...")
     original_images = torch.clone(original_images)
+    dino_input = torch.clone(dino_input)
     model.eval()
     dtype = torch.float32
     if accelerator.mixed_precision == "fp16":
@@ -1041,20 +1058,22 @@ def reconstruct_images(model, original_images, fnames, accelerator,
     elif accelerator.mixed_precision == "bf16":
         dtype = torch.bfloat16
 
-    with torch.autocast("cuda", dtype=dtype, enabled=accelerator.mixed_precision != "no"):
-        enc_tokens, encoder_dict = accelerator.unwrap_model(model).encode(original_images)
+    local_model = accelerator.unwrap_model(model)
+    local_model.eval()
+    
     reconstructed_images_list = []
     # QY: Eval with different decode_mask_rate
     mask_rate_list = [i / 16 for i in range(17)]
-    for decode_mask_rate in mask_rate_list:
-        reconstructed_images = accelerator.unwrap_model(model).decode(enc_tokens, decode_mask_rate=decode_mask_rate)
+    for decode_mask_rate_val in mask_rate_list:
+        with torch.autocast("cuda", dtype=dtype, enabled=accelerator.mixed_precision != "no"):
+            reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True)
         if pretrained_tokenizer is not None:
             reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
         reconstructed_images_list.append(reconstructed_images)
 
     vis_dict = {}
-    if accelerator.unwrap_model(model).use_policy:
-        reconstructed_images, extra_results_dict = accelerator.unwrap_model(model).forward(original_images)
+    if local_model.use_policy:
+        reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input)
         if pretrained_tokenizer is not None:
             reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
         reconstructed_images_list.append(reconstructed_images)
