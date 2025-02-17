@@ -402,11 +402,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
 
     def set_gaussian_sampling_sigma(self, global_step: int, max_train_steps: int):
         if self.gaussian_sampling is None:
-            self.gaussian_sampling_sigma = 1.0
+            self.gaussian_sampling_sigma = 0.1
         else:
             sigma_0 = self.gaussian_sampling.sigma_0  # e.g., 0.2
             alpha = self.gaussian_sampling.alpha      # e.g., 1.0
-            self.gaussian_sampling_sigma = 1 + sigma_0 * math.exp(- alpha * global_step)
+            self.gaussian_sampling_sigma = 0.1 + sigma_0 * math.exp(- alpha * global_step)
 
     def create_key_padding_mask(self, mask_rate, num_of_image_tokens, num_of_latent_tokens):
         """

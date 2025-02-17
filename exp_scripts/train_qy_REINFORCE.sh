@@ -62,7 +62,7 @@ WANDB_MODE=offline accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=False \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
-    training.per_gpu_batch_size=64 \
+    training.per_gpu_batch_size=32 \
     optimizer.params.learning_rate=1e-3 \
     training.max_train_steps=250_000 \
     losses.use_self_distilliation=False \
