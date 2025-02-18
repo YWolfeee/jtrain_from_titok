@@ -23,7 +23,7 @@ use_reconstruction_regularization=True
 per_gpu_batch_size=64
 learning_rate=4e-4
 is_increasing=False
-output_root="results_try_tradeoff_with_activation"
+output_root="results_try_new_design"
 # policy_network="mlp"
 
 # Loop through each YAML file
@@ -35,14 +35,14 @@ for config_file in "${config_files[@]}"; do
     # for setting in "${settings[@]}"; do
         # Evaluate the settings to create variables dynamically
         # eval $setting
-    for use_gaussian_smoothing in "True"; do
-        for alpha_start in 0.0 0.1 0.2; do
+    for use_gaussian_smoothing in "False"; do
+        for alpha_start in 0.0 0.1; do
             for policy_network in "mlp" "transformer"; do
                 for rate_weight in 0.1 0.5 1; do    
 
 
                     # Dynamically create the job name
-                    jobname="pairwise+rate_weight=${rate_weight}+policy_network=${policy_network}+use_gaussian_smoothing=${use_gaussian_smoothing}+anneal_policy+alpha_start=${alpha_start}"
+                    jobname="gaussian_1+rate_weight=${rate_weight}+policy_network=${policy_network}+anneal_policy+alpha_start=${alpha_start}"
 
                     echo "jobname = $jobname"
                     # Submit the job

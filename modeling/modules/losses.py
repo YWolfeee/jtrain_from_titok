@@ -124,16 +124,15 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 actor_loss = torch.zeros_like(critic_loss)
             elif self.use_pairwise:
                 critic_loss1, critic_loss2 = critic_loss.chunk(2)
-                prob1, prob2 = extra_input_dict["prob_of_sampled_mask_rate"].chunk(2)
+                logprob1, logprob2 = extra_input_dict["logprob_mask"].chunk(2)
 
                 reward = (critic_loss1 - critic_loss2).detach()
-                actor_loss = reward * torch.clip(
-                    torch.log(prob1 / prob2), -10, 10)
+                actor_loss = reward * torch.clip(logprob1 - logprob2, -10, 10)
 
             else:
                 critic_loss = reconstruction_loss + self.rate_weight * rate_loss
                 reward = critic_loss.detach()
-                actor_loss = reward * torch.log(extra_input_dict["prob_of_sampled_mask_rate"])
+                actor_loss = reward * extra_input_dict["logprob_mask"]
 
             critic_loss, actor_loss = critic_loss.mean(), actor_loss.mean()
 

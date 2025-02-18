@@ -14,7 +14,7 @@ source ~/.bashrc
 
 config_name="titok_b256_4096_12"
 model_type="transformer"
-tag="debug_new_design_no_policy_encoder_condition"
+tag="debug_new_design_gaussian_1"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -36,7 +36,7 @@ accelerate launch \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
     \
-    model.reconstruction_regularization.use_policy=False \
+    model.reconstruction_regularization.use_policy=True \
     model.reconstruction_regularization.policy.model_type=${model_type} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
@@ -58,7 +58,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.temperature.T0=10000 \
     model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
     \
-    model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=True \
+    model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=False \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     training.per_gpu_batch_size=64 \
@@ -66,7 +66,6 @@ accelerate launch \
     training.max_train_steps=250_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
-    losses.use_self_distilliation=False \
 
 
     # experiment.init_weight="results_try_tradeoff_with_activation/titok+config=titok_b${shape}_4096_12/checkpoint-250000/unwrapped_model/pytorch_model.bin"

@@ -216,12 +216,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         
         # Set up gaussian sampling
         try:
-            tmp = config.model.reconstruction_regularization.policy.gaussian_sampling
             logit_head_type = config.model.reconstruction_regularization.policy.logit_head_type
             self.use_gaussian_sampling = logit_head_type == "gaussian_1"
-            self.gaussian_sampling = tmp if self.use_gaussian_sampling else None
         except:
-            self.gaussian_sampling = None
             self.use_gaussian_sampling = False
         self.set_gaussian_sampling_sigma(0, config.training.max_train_steps)
 
@@ -356,16 +353,20 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             key_padding_mask = self.create_key_padding_mask(fixed_mask_rate)
             output_dict = {}
         elif self.use_policy: # For training and general evaluation
-            # in some cases, the policy_net function is vmap
+            # in some cases, pairwise will be used
+            use_pairwise = self.use_pairwise and self.training
+            x = torch.concat([x, x]) if use_pairwise else x
             output_dict = self.policy_net(
                 token_features, 
                 temperature=self.softmax_temperature, 
                 gumbel_softmax=self.gumbel_softmax,
                 gaussian_smoothing=self.gaussian_smoothing,
                 gaussian_sampling_sigma=self.gaussian_sampling_sigma,
-                annealing_factor=self.annealing_factor
+                annealing_factor=self.annealing_factor,
+                use_pairwise=use_pairwise,
             )
             key_padding_mask = self.create_key_padding_mask(output_dict["sampled_mask_rate"]).to(x.device)
+
         else:
             raise ValueError("Either fixed_mask_rate or policy_net must be provided")
 
@@ -494,16 +495,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if self.use_policy and not use_fixed_mask_rate:
             # Use policy net to estimate the mask rate
 
-            if self.use_pairwise and self.training:
-                z_quantized, result_dict = self.encode(
-                    torch.concat([x,x]), 
-                    torch.concat([token_features, token_features])
-                )
-            else:
-                z_quantized, result_dict = self.encode(x, token_features)
+            z_quantized, result_dict = self.encode(x, token_features)
 
             result_dict["annealing_factor"] = self.annealing_factor
             result_dict["softmax_temperature"] = self.softmax_temperature
+            result_dict["gaussian_sampling_sigma"] = self.gaussian_sampling_sigma
             forward_mask_rate = result_dict["sampled_mask_rate"]
 
         else:

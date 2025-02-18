@@ -29,7 +29,7 @@ accelerate launch \
     --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
-    experiment.project="try_tradeoff_with_activation" \
+    experiment.project="try_new_design" \
     experiment.name="${job_name}" \
     experiment.output_dir="${output_root}/${job_name}" \
     model.use_reconstruction_regularization=${use_reconstruction_regularization} \
@@ -38,7 +38,6 @@ accelerate launch \
     model.reconstruction_regularization.max_mask_rate=0.95 \
     model.reconstruction_regularization.use_annealing=False \
     model.reconstruction_regularization.annealing.is_increasing=False \
-    losses.use_self_distilliation=False \
     \
     model.reconstruction_regularization.use_policy=True \
     model.reconstruction_regularization.policy.rate_weight=${rate_weight} \
@@ -48,6 +47,10 @@ accelerate launch \
     \
     model.reconstruction_regularization.policy.use_advantage=False \
     model.reconstruction_regularization.policy.use_pairwise=True \
+    \
+    model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
+    model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
+    \
     model.reconstruction_regularization.use_gumbel_softmax=False \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
