@@ -35,19 +35,22 @@ for config_file in "${config_files[@]}"; do
     # for setting in "${settings[@]}"; do
         # Evaluate the settings to create variables dynamically
         # eval $setting
-    for use_gaussian_smoothing in "False"; do
-        for alpha_start in 0.0 0.1; do
-            for policy_network in "mlp" "transformer"; do
+    for use_ours in "True"; do
+        for alpha_start in 0 0.1 2; do
+            for policy_network in "mlp"; do
                 for rate_weight in 0.1 0.5 1; do    
-
+        # alpha_start=0.0
+        # policy_network="mlp"
+        # rate_weight=1.0
 
                     # Dynamically create the job name
-                    jobname="gaussian_1+rate_weight=${rate_weight}+policy_network=${policy_network}+anneal_policy+alpha_start=${alpha_start}"
+                    # jobname="elastic+${config_name}"
+                    jobname="gaussian+rate_weight=${rate_weight}+policy_network=${policy_network}+anneal_policy+alpha_start=${alpha_start}"
 
                     echo "jobname = $jobname"
                     # Submit the job
                     command="sbatch --job-name=$jobname --output='$output_root/$jobname/logs/slurm_%j.out' \
-                        exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_gaussian_smoothing $rate_weight $policy_network $alpha_start $output_root"
+                        exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_ours $rate_weight $policy_network $alpha_start $output_root"
                     echo "$command"
                     eval "$command"
                 # exit
