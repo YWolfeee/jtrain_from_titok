@@ -1,12 +1,12 @@
 #PBS -N titok_reinforce
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=2:mem=90gb:ngpus=2:host=cvml05
+#PBS -l select=1:ncpus=2:mem=90gb:ngpus=2:host=cvml03
 
 config_name='titok_b128_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
-rate_weight=1
-tag="gaussian_test_${model_type}_${logit_head_type}_rate_weight=${rate_weight}"
+rate_weight=1000
+tag="rate_weight_test_with_layer_norm_${model_type}_${logit_head_type}_rate_weight=${rate_weight}"
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -22,7 +22,7 @@ accelerate launch \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
-    experiment.name="${config_name}_${tag}" \
+    experiment.name="${tag}" \
     experiment.output_dir="temp/${config_name}_${tag}" \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
@@ -39,7 +39,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
-    model.reconstruction_regularization.policy.rate_weight=1 \
+    model.reconstruction_regularization.policy.rate_weight=${rate_weight} \
     model.reconstruction_regularization.policy.use_pairwise=True \
     \
     model.reconstruction_regularization.use_gumbel_softmax=False \
@@ -47,7 +47,7 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
     model.reconstruction_regularization.policy.annealing.use_annealing=False \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.1 \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \

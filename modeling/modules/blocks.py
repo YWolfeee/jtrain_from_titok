@@ -403,14 +403,21 @@ class PolicyNet(nn.Module):
             self.num_heads = config.model.reconstruction_regularization.policy.num_heads
             self.num_layers = num_layers
             self.positional_embedding = nn.Parameter(torch.randn(1, self.num_tokens, self.in_channels))
-            encoder_layer = nn.TransformerEncoderLayer(
-                d_model=self.in_channels,
-                nhead=self.num_heads,
-                dim_feedforward=int(self.in_channels * mlp_ratio),
-                activation="gelu",
-                batch_first=True,
-            )
-            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=self.num_layers)
+            # encoder_layer = nn.TransformerEncoderLayer(
+            #     d_model=self.in_channels,
+            #     nhead=self.num_heads,
+            #     dim_feedforward=int(self.in_channels * mlp_ratio),
+            #     activation="gelu",
+            #     batch_first=True,
+            # )
+            # self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=self.num_layers)
+            self.ln_pre = nn.LayerNorm(self.in_channels)
+            self.transformer = nn.ModuleList()
+            for i in range(self.num_layers):
+                self.transformer.append(ResidualAttentionBlock(
+                    self.in_channels, self.num_heads, mlp_ratio=4.0
+                ))
+            self.ln_post = nn.LayerNorm(self.in_channels)
         
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
@@ -447,15 +454,25 @@ class PolicyNet(nn.Module):
             # DEBUG: print("\033[91mCHECK token_features.shape", token_features.shape, "\033[0m")
             # DEBUG: print("\033[91mCHECK self.positional_embedding.shape", self.positional_embedding.shape, "\033[0m")
             token_features = token_features + self.positional_embedding
-            token_features = self.transformer(token_features)  # [B, N, C]
+            token_features = self.ln_pre(token_features)
+            token_features = token_features.permute(1, 0, 2)
+            for i in range(self.num_layers):
+                token_features = self.transformer[i](token_features)
+            token_features = token_features.permute(1, 0, 2)
+            token_features = self.ln_post(token_features)
             global_token = token_features[:, 0, :] # [B, C]
             logits = self.logit_head(global_token)
         
         elif self.model_type == "causal_transformer":
             N = token_features.shape[1]
             token_features = token_features + self.positional_embedding
+            token_features = self.ln_pre(token_features)
             causal_mask = torch.triu(torch.ones(N, N), diagonal=1).bool().to(token_features.device)
-            token_features = self.transformer(token_features, src_mask=causal_mask)  # [N, B, D]
+            token_features = token_features.permute(1, 0, 2)
+            for i in range(self.num_layers):
+                token_features = self.transformer[i](token_features, src_mask=causal_mask)
+            token_features = token_features.permute(1, 0, 2)
+            token_features = self.ln_post(token_features)
             global_token = token_features[:, 0, :] # [B, C]
             logits = self.logit_head(global_token)
 
