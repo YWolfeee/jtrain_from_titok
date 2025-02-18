@@ -103,23 +103,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         scale = self.encoder.width ** -0.5
         self.latent_tokens = nn.Parameter(
             scale * torch.randn(self.num_latent_tokens, self.encoder.width))
-
-        if self.quantize_mode == "vq":
-            self.quantize = VectorQuantizer(
-                codebook_size=config.model.vq_model.codebook_size,
-                token_size=config.model.vq_model.token_size,
-                commitment_cost=config.model.vq_model.commitment_cost,
-                use_l2_norm=config.model.vq_model.use_l2_norm,)
-        elif self.quantize_mode == "vae":
-            self.quantize = DiagonalGaussianDistribution
-        else:
-            raise NotImplementedError
-
-        self.feature_extractor_name = config.model.reconstruction_regularization.policy.feature_extractor_name # 'facebook/dinov2-base'
-        self.feature_extractor = AutoModel.from_pretrained(self.feature_extractor_name)
-        self.feature_extractor.eval()
-        self.feature_extractor.requires_grad_(False) # OUTPUT SHAPE: [B, 257, 768] for base, [B, 257, 1024] for large
-
         
         if self.finetune_decoder:
             # Freeze encoder/quantizer/latent tokens
@@ -174,7 +157,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         except:
             self.use_policy = False
         if self.use_policy:
-            self.policy_net = PolicyNet(config, self.feature_extractor.config.hidden_size, 257)
+            self.policy_net = PolicyNet(config, 768, 257) # 768 is the hidden size of dinov2-base, 257 is the number of tokens in the image + cls_tokens
 
         # Gumbel-Softmax
         self.gumbel_softmax = None
@@ -226,6 +209,22 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.num_of_latent_tokens = config.model.vq_model.num_latent_tokens
 
         self.apply(self._init_weights)
+
+        if self.quantize_mode == "vq":
+            self.quantize = VectorQuantizer(
+                codebook_size=config.model.vq_model.codebook_size,
+                token_size=config.model.vq_model.token_size,
+                commitment_cost=config.model.vq_model.commitment_cost,
+                use_l2_norm=config.model.vq_model.use_l2_norm,)
+        elif self.quantize_mode == "vae":
+            self.quantize = DiagonalGaussianDistribution
+        else:
+            raise NotImplementedError
+
+        self.feature_extractor_name = config.model.reconstruction_regularization.policy.feature_extractor_name # 'facebook/dinov2-base'
+        self.feature_extractor = AutoModel.from_pretrained(self.feature_extractor_name)
+        self.feature_extractor.eval()
+        self.feature_extractor.requires_grad_(False) # OUTPUT SHAPE: [B, 257, 768] for base, [B, 257, 1024] for large
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""
