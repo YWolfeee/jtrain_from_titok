@@ -444,7 +444,7 @@ class PolicyNet(nn.Module):
                 use_pairwise: bool=False,
         ):
         # DEBUG: print parameter norm of logit_head
-        print("\033[91mCHECK parameter norm of logit_head", self.logit_head.weight.norm(), "\033[0m")
+        # print("\033[91mCHECK parameter norm of logit_head", self.logit_head.weight.norm(), "\033[0m")
         if self.model_type == "mlp":
             global_token = token_features[:, 0, :] # [B, C]
             x = nn.functional.gelu(self.fc1(global_token)) # Use the first global token [cls_token]
