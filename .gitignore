@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 maskgit-vqgan-imagenet-f16-256.bin
+imagenet64-iter-1600000-opt.th
 stage1_dry_run
 *run1/
 wandb/
@@ -15,4 +16,5 @@ datasets
 *.e*
 dry_run*
 .vscode/
+vdvae/
 titok_b64_4096_12_REINFORCE_mlp
