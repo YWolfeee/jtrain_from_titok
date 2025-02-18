@@ -492,7 +492,7 @@ def train_one_epoch(config, logger, accelerator,
             batch_time_meter.update(time.time() - end)
             end = time.time()
 
-            if (global_step + 1) % config.experiment.log_every == 0:
+            if (global_step + 1) % config.experiment.log_every == 0 or global_step == 0:
                 samples_per_second_per_gpu = (
                     config.training.gradient_accumulation_steps * config.training.per_gpu_batch_size / batch_time_meter.val
                 )
@@ -844,7 +844,7 @@ def eval_loss(
     pretrained_tokenizer=None,
     sampled_batches=4
 ):
-    decode_mask_rates = [i / 16 for i in range(16)]
+    decode_mask_rates = [i / 8 for i in range(8)]
     local_model = accelerator.unwrap_model(model)
     local_model.eval()
     eval_loss_dict = {}
