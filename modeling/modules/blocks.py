@@ -390,14 +390,14 @@ class PolicyNet(nn.Module):
         self.config = config
         self.in_channels = in_channels
         self.num_tokens = num_tokens
-        self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
+        # self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
 
         self.model_type = config.model.reconstruction_regularization.policy.model_type
         assert self.model_type in ["mlp", "transformer", "causal_transformer"], \
             "model_type must be either mlp / transformer / causal_transformer"
         
         if self.model_type == "mlp":
-            self.fc1 = nn.Linear(self.in_channels, self.hidden_size)
+            self.fc1 = nn.Linear(self.in_channels, self.in_channels)
 
         elif self.model_type == "transformer" or self.model_type == "causal_transformer":
             self.num_heads = config.model.reconstruction_regularization.policy.num_heads
