@@ -419,12 +419,13 @@ class PolicyNet(nn.Module):
         self.logit_head_type = config.model.reconstruction_regularization.policy.logit_head_type
         assert self.logit_head_type in ["categorical_256", "categorical_8", "gaussian_1"], \
             "logit_head must be either categorical_256 / categorical_8 / gaussian_1"
+        last_hidden_size = self.hidden_size if self.model_type == "mlp" else self.in_channels
         if self.logit_head_type == "categorical_256":
-            self.logit_head = nn.Linear(self.in_channels, 256)
+            self.logit_head = nn.Linear(last_hidden_size, 256)
         elif self.logit_head_type == "categorical_8":
-            self.logit_head = nn.Linear(self.in_channels, 8)
+            self.logit_head = nn.Linear(last_hidden_size, 8)
         elif self.logit_head_type == "gaussian_1":
-            self.logit_head = nn.Linear(self.in_channels, 1)
+            self.logit_head = nn.Linear(last_hidden_size, 1)
 
     def forward(self, 
                 token_features: torch.Tensor, 
@@ -435,7 +436,8 @@ class PolicyNet(nn.Module):
                 gaussian_sampling_sigma=1.0,
                 use_pairwise: bool=False,
         ):
-        
+        # DEBUG: print parameter norm of logit_head
+        print("\033[91mCHECK parameter norm of logit_head", self.logit_head.weight.norm(), "\033[0m")
         if self.model_type == "mlp":
             global_token = token_features[:, 0, :] # [B, C]
             x = nn.functional.gelu(self.fc1(global_token)) # Use the first global token [cls_token]
@@ -557,8 +559,8 @@ class PolicyNet(nn.Module):
             u = torch.empty_like(rate_mean).uniform_(0, 1)
             u_scaled = u * (cdf_b - cdf_a) + cdf_a  # maps to [cdf(a), cdf(b)]
 
-            # Use the inverse CDF (icdf) to obtain the sample.
-            sample_rate = normal.icdf(u_scaled)
+            # Use the inverse CDF (icdf) to obtain the sample. We do not want to backprop through this.
+            sample_rate = normal.icdf(u_scaled).detach()
             logprob_mask_check = normal.log_prob(sample_rate)
             # print("\033[91mCHECK sampled_rate", sampled_rate, "\033[0m")
             # print("\033[91mCHECK logprob_mask", logprob_mask, "\033[0m")
