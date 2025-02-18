@@ -1,6 +1,7 @@
 from vdvae.hps import Hyperparams
 from vdvae.vae import VAE
 from PIL import Image
+import torch
 import torchvision.transforms as transforms
 from vdvae.data import set_up_imagenet64_preprocess_func
 
@@ -48,7 +49,16 @@ def init_vae_settings():
 H = init_vae_settings()
 H, preprocess_fn = set_up_imagenet64_preprocess_func(H)
 vae = VAE(H)
-# load vdvae/test.png
+state_dict = torch.load('imagenet64-iter-1600000-model.th', map_location='cpu')
+new_state_dict = {}
+l = len('module.')
+for k in state_dict:
+    if k.startswith('module.'):
+        new_state_dict[k[l:]] = state_dict[k]
+    else:
+        new_state_dict[k] = state_dict[k]
+state_dict = new_state_dict
+vae.load_state_dict(state_dict)
 
 for i in range(3):
     img = Image.open(f'vdvae/test_imgs/test{i}.png').convert('RGB')
@@ -69,4 +79,4 @@ for i in range(3):
     for key in stats:
         stats[key] = stats[key].item()
 
-    print(f"Complexity Level of {i} (higher is more complex): {stats}")
+    print(f"Stats for Complexity Level{i}: {stats}")

@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 maskgit-vqgan-imagenet-f16-256.bin
 imagenet64-iter-1600000-opt.th
+imagenet64-iter-1600000-model.th
 stage1_dry_run
 *run1/
 wandb/
