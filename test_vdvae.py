@@ -1,3 +1,6 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
 from vdvae.hps import Hyperparams
 from vdvae.vae import VAE
 from PIL import Image
@@ -60,7 +63,13 @@ for k in state_dict:
 state_dict = new_state_dict
 vae.load_state_dict(state_dict)
 
-for i in range(3):
+# Create temp_results directory if it doesn't exist
+os.makedirs('temp_results', exist_ok=True)
+
+# Create figure with 8 subplots in one row
+plt.figure(figsize=(32, 4))
+
+for i in range(8):
     img = Image.open(f'vdvae/test_imgs/test{i}.png').convert('RGB')
     transform = transforms.Compose([
         transforms.Resize((64, 64)),  # Resize to 64x64
@@ -79,4 +88,14 @@ for i in range(3):
     for key in stats:
         stats[key] = stats[key].item()
 
-    print(f"Stats for Complexity Level{i}: {stats}")
+    # Plot in the corresponding subplot position
+    plt.subplot(1, 8, i+1)
+    plt.imshow(img[0].cpu().numpy().astype(np.uint8))
+    
+    # Add stats text above the image
+    stats_text = '\n'.join([f'{k}: {v:.2f}' for k,v in stats.items()])
+    plt.title(stats_text)
+
+# Save the complete figure with all images
+plt.savefig('temp_results/all_tests_with_stats.png')
+plt.close()

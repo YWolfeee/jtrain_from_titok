@@ -18,3 +18,4 @@ datasets
 dry_run*
 .vscode/
 titok_b64_4096_12_REINFORCE_mlp
+temp_results/
