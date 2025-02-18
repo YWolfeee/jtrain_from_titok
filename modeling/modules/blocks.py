@@ -390,7 +390,7 @@ class PolicyNet(nn.Module):
         self.config = config
         self.in_channels = in_channels
         self.num_tokens = num_tokens
-        # self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
+        self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
 
         self.model_type = config.model.reconstruction_regularization.policy.model_type
         assert self.model_type in ["mlp", "transformer", "causal_transformer"], \
@@ -444,7 +444,7 @@ class PolicyNet(nn.Module):
                 use_pairwise: bool=False,
         ):
         # DEBUG: print parameter norm of logit_head
-        print("\033[91mCHECK parameter norm of logit_head", self.logit_head.weight.norm(), "\033[0m")
+        # print("\033[91mCHECK parameter norm of logit_head", self.logit_head.weight.norm(), "\033[0m")
         if self.model_type == "mlp":
             global_token = token_features[:, 0, :] # [B, C]
             x = nn.functional.gelu(self.fc1(global_token)) # Use the first global token [cls_token]

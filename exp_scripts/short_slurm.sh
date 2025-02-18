@@ -14,7 +14,7 @@ source ~/.bashrc
 
 config_name="titok_b256_4096_12"
 model_type="transformer"
-tag="debug_new_design_gaussian_1"
+tag="debug_new_design_cat256"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -48,11 +48,11 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=False \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.use_annealing=True \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.02 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
-    model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
+    model.reconstruction_regularization.policy.logit_head_type="categorical_8" \
     \
     model.reconstruction_regularization.policy.temperature.use_T=False \
     model.reconstruction_regularization.policy.temperature.T0=10000 \
