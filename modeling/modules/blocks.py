@@ -432,7 +432,8 @@ class PolicyNet(nn.Module):
                 gumbel_softmax=None, 
                 gaussian_smoothing=None, 
                 annealing_factor=1.0,
-                gaussian_sampling_sigma=1.0
+                gaussian_sampling_sigma=1.0,
+                use_pairwise: bool=False,
         ):
         
         if self.model_type == "mlp":
@@ -463,16 +464,19 @@ class PolicyNet(nn.Module):
         if gaussian_smoothing is not None:
             # assert self.logit_head_type == "categorical_256", "Gaussian smoothing is only supported for categorical_256"
             logits = apply_gaussian_smoothing(logits, gaussian_smoothing.kernel_size, gaussian_smoothing.sigma)
-
-        logits = logits - torch.mean(logits, dim=-1, keepdim=True)
         
+        if use_pairwise:
+            # before sampling, we double the logits
+            # in this case subsequent logits are consistent
+            logits = torch.concat([logits, logits])
+
         # Use [Gumbel Softmax] or [Sampling w/ REINFORCE]
         if gumbel_softmax is not None: # We don't do reinforce
             # assert (
             #     self.logit_head_type == "categorical_256" or 
             #     self.logit_head_type == "categorical_8"
             # ), "Gumbel softmax is only supported for categorical_256 and categorical_8"
-            
+            raise NotImplementedError("Gumbel softmax has been deprecated.")
             logits = annealing_factor * logits + \
                 (1-annealing_factor) * logits.detach()
             if gumbel_softmax.fix_tau:
@@ -494,6 +498,8 @@ class PolicyNet(nn.Module):
             }
 
         elif self.logit_head_type == "categorical_256" or self.logit_head_type == "categorical_8": # Categorical sampling
+            logits = logits - torch.mean(logits, dim=-1, keepdim=True)
+
             probs = torch.nn.functional.softmax(logits / temperature, dim=-1) # [B, N]
             samples = torch.multinomial(probs, num_samples=1)[:, 0]
             sampled_prob = probs[torch.arange(samples.shape[0]), samples]
@@ -514,7 +520,7 @@ class PolicyNet(nn.Module):
             return {
                 "sampled_mask_rate": mask_rate,
                 "mask_rate_value": mask_rate,
-                "prob_of_sampled_mask_rate": sampled_prob
+                "logprob_mask": torch.log(sampled_prob),
             }
 
         elif self.logit_head_type == "gaussian_1": # Gaussian sampling
@@ -524,16 +530,20 @@ class PolicyNet(nn.Module):
             # # Reparameterize and sample from Gaussian distribution with std=temperature
             # sampled_from_logits = torch.randn_like(logits) * gaussian_sampling_sigma + logits
             # # Compute the probability of the sampled mask rate based on Gaussian distribution
-            # prob_of_sampled_mask_rate = torch.exp(
+            # logprob_mask = torch.exp(
             #     -0.5 * ((sampled_from_logits - logits) / gaussian_sampling_sigma) ** 2
             # ) / (gaussian_sampling_sigma * math.sqrt(2 * math.pi))
             # sampled_rate = torch.sigmoid(sampled_from_logits)[:, 0]
 
             # ### Use truncated normal distribution
             rate_mean = torch.sigmoid(logits)[:, 0]
+
+            # sample_rate = torch.zeros_like(rate_mean)
+            # torch.nn.init.trunc_normal_(sample_rate, rate_mean, gaussian_sampling_sigma, 0, 1)
+
             normal = torch.distributions.Normal(rate_mean, gaussian_sampling_sigma)
-            print("\033[91mCHECK rate_mean", rate_mean, "\033[0m")
-            print("\033[91mCHECK gaussian_sampling_sigma", gaussian_sampling_sigma, "\033[0m")
+            # print("\033[91mCHECK rate_mean", rate_mean, "\033[0m")
+            # print("\033[91mCHECK gaussian_sampling_sigma", gaussian_sampling_sigma, "\033[0m")
     
             # Convert bounds to tensors on the same device & dtype as mean.
             a_tensor = torch.tensor(0, dtype=rate_mean.dtype, device=rate_mean.device)
@@ -548,17 +558,20 @@ class PolicyNet(nn.Module):
             u_scaled = u * (cdf_b - cdf_a) + cdf_a  # maps to [cdf(a), cdf(b)]
 
             # Use the inverse CDF (icdf) to obtain the sample.
-            sampled_rate = normal.icdf(u_scaled)
-            prob_of_sampled_mask_rate = normal.log_prob(sampled_rate)
-            print("\033[91mCHECK sampled_rate", sampled_rate, "\033[0m")
-            print("\033[91mCHECK prob_of_sampled_mask_rate", prob_of_sampled_mask_rate, "\033[0m")
+            sample_rate = normal.icdf(u_scaled)
+            logprob_mask_check = normal.log_prob(sample_rate)
+            # print("\033[91mCHECK sampled_rate", sampled_rate, "\033[0m")
+            # print("\033[91mCHECK logprob_mask", logprob_mask, "\033[0m")
 
-            sampled_mask_rate = 1 - sampled_rate
+            sampled_mask_rate = 1 - sample_rate    # ratio of masking
+
+            # This is the un-normalized log-prob that use for pairwise reinforce
+            logprob_mask = - (sample_rate - rate_mean)**2 / (2 * gaussian_sampling_sigma ** 2)
             
             return {
                 "sampled_mask_rate": sampled_mask_rate,
                 "mask_rate_value": sampled_mask_rate,
-                "prob_of_sampled_mask_rate": prob_of_sampled_mask_rate
+                "logprob_mask": logprob_mask,
             }
         else:
             raise ValueError(f"Invalid logit head type: {self.logit_head_type}")
