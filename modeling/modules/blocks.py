@@ -390,7 +390,7 @@ class PolicyNet(nn.Module):
         self.config = config
         self.in_channels = in_channels
         self.num_tokens = num_tokens
-        # self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
+        self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
 
         self.model_type = config.model.reconstruction_regularization.policy.model_type
         assert self.model_type in ["mlp", "transformer", "causal_transformer"], \

@@ -36,8 +36,8 @@ for config_file in "${config_files[@]}"; do
         # Evaluate the settings to create variables dynamically
         # eval $setting
     for use_ours in "True"; do
-        for alpha_start in 2; do
-            for policy_network in "mlp" "transformer"; do
+        for alpha_start in 0 0.1 2; do
+            for policy_network in "mlp"; do
                 for rate_weight in 0.1 0.5 1; do    
         # alpha_start=0.0
         # policy_network="mlp"
@@ -45,7 +45,7 @@ for config_file in "${config_files[@]}"; do
 
                     # Dynamically create the job name
                     # jobname="elastic+${config_name}"
-                    jobname="elastic+rate_weight=${rate_weight}+policy_network=${policy_network}+anneal_policy+alpha_start=${alpha_start}"
+                    jobname="gaussian+rate_weight=${rate_weight}+policy_network=${policy_network}+anneal_policy+alpha_start=${alpha_start}"
 
                     echo "jobname = $jobname"
                     # Submit the job
