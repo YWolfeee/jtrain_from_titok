@@ -16,5 +16,4 @@ datasets
 *.e*
 dry_run*
 .vscode/
-vdvae/
 titok_b64_4096_12_REINFORCE_mlp
