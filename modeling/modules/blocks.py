@@ -419,13 +419,13 @@ class PolicyNet(nn.Module):
         self.logit_head_type = config.model.reconstruction_regularization.policy.logit_head_type
         assert self.logit_head_type in ["categorical_256", "categorical_8", "gaussian_1"], \
             "logit_head must be either categorical_256 / categorical_8 / gaussian_1"
-        hidden_size = self.hidden_size if self.model_type == "mlp" else self.in_channels
+        last_hidden_size = self.hidden_size if self.model_type == "mlp" else self.in_channels
         if self.logit_head_type == "categorical_256":
-            self.logit_head = nn.Linear(hidden_size, 256)
+            self.logit_head = nn.Linear(last_hidden_size, 256)
         elif self.logit_head_type == "categorical_8":
-            self.logit_head = nn.Linear(hidden_size, 8)
+            self.logit_head = nn.Linear(last_hidden_size, 8)
         elif self.logit_head_type == "gaussian_1":
-            self.logit_head = nn.Linear(hidden_size, 1)
+            self.logit_head = nn.Linear(last_hidden_size, 1)
 
     def forward(self, 
                 token_features: torch.Tensor, 
