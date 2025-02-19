@@ -103,10 +103,10 @@ class VAEResults:
         self.stats = json.load(open("vae_results.json"))
 
     def get(self, x):
-        if x in self.stats:
-            return self.stats[x]
-        else:
-            return {"elbo": 2.04, "distortion": 0.94, "rate": 1.10} # default average value (currently over 20k samples)
+        avg_dict = {"elbo_avg": 2.04, "distortion_avg": 0.94, "rate_avg": 1.10}
+        sample_dict = self.stats[x] if x in self.stats else {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
+        sample_dict.update(avg_dict)
+        return sample_dict
 
 
 class SimpleImageDataset:
