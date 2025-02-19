@@ -346,7 +346,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         
         return key_padding_mask
 
-    def encode(self, x, token_features: torch.Tensor, fixed_mask_rate: torch.Tensor = None):
+    def encode(self, x, token_features: torch.Tensor, fixed_mask_rate: torch.Tensor = None, vae_results: dict = None):
         # Get key padding mask: if fixed mask rate is provided, use it; otherwise, use policy net to get mask rate
         if fixed_mask_rate is not None: # For specific evaluation
             key_padding_mask = self.create_key_padding_mask(fixed_mask_rate)
@@ -363,6 +363,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 gaussian_sampling_sigma=self.gaussian_sampling_sigma,
                 annealing_factor=self.annealing_factor,
                 use_pairwise=use_pairwise,
+                vae_results=vae_results
             )
             key_padding_mask = self.create_key_padding_mask(output_dict["sampled_mask_rate"]).to(x.device)
 
@@ -476,10 +477,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         z_quantized = z_quantized * mask.to(z_quantized.dtype, z_quantized.device)
         return z_quantized
     
-    def forward(self, x, dino_input=None, fixed_mask_rate_val=0.0, use_fixed_mask_rate=False):
+    def forward(self, x, dino_input=None, fixed_mask_rate_val=0.0, use_fixed_mask_rate=False, vae_results=None):
         if not isinstance(fixed_mask_rate_val, float):
             raise ValueError("decode_mask_rate in forward() should be a float")
-        
 
         # QY: If dino_input is not provided, use the original image to form the DINO input
         if dino_input is None:
@@ -493,8 +493,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # Step 1: MASKED ENCODING
         if self.use_policy and not use_fixed_mask_rate:
             # Use policy net to estimate the mask rate
-
-            z_quantized, result_dict = self.encode(x, token_features)
+            z_quantized, result_dict = self.encode(x, token_features, vae_results=vae_results)
 
             result_dict["annealing_factor"] = self.annealing_factor
             result_dict["softmax_temperature"] = self.softmax_temperature
