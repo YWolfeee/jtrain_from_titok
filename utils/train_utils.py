@@ -350,7 +350,7 @@ def train_one_epoch(config, logger, accelerator,
     log_dino_input = batch["dino_input"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
     log_dino_input = log_dino_input[:config.training.num_generated_images]
     log_fnames = batch["__key__"][:config.training.num_generated_images]
-    log_vae_results = {k: v[:config.training.num_generated_images] for k, v in batch["vae_results"].items()}
+    log_vae_results = {k: v[:config.training.num_generated_images].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) for k, v in batch["vae_results"].items()}
     for i, batch in enumerate(train_dataloader):
         model.train()
         if "image" in batch:
@@ -361,7 +361,8 @@ def train_one_epoch(config, logger, accelerator,
                 accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
             )
             # fnames = batch["__key__"] # Seems not used
-            vae_results = batch["vae_results"]
+            vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+               for k, v in batch["vae_results"].items()}
         else:
             raise ValueError(f"Not found valid keys: {batch.keys()}")
 
@@ -862,7 +863,8 @@ def eval_loss(
         dino_input = batch["dino_input"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
-        vae_results = batch["vae_results"]
+        vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+               for k, v in batch["vae_results"].items()}
         if pretrained_tokenizer is not None:
             pretrained_tokenizer.eval()
             proxy_codes = pretrained_tokenizer.encode(images)
@@ -984,7 +986,8 @@ def eval_reconstruction(
         dino_input = batch["dino_input"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
-        vae_results = batch["vae_results"]
+        vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+               for k, v in batch["vae_results"].items()}
         images_lists = []
         original_images = torch.clone(images)
         original_images = torch.clamp(original_images, 0.0, 1.0)
