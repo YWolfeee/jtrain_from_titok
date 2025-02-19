@@ -350,7 +350,7 @@ def train_one_epoch(config, logger, accelerator,
     log_dino_input = batch["dino_input"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
     log_dino_input = log_dino_input[:config.training.num_generated_images]
     log_fnames = batch["__key__"][:config.training.num_generated_images]
-
+    log_vae_results = {k: v[:config.training.num_generated_images].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) for k, v in batch["vae_results"].items()}
     for i, batch in enumerate(train_dataloader):
         model.train()
         if "image" in batch:
@@ -360,10 +360,12 @@ def train_one_epoch(config, logger, accelerator,
             dino_input = batch["dino_input"].to(
                 accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
             )
+            # fnames = batch["__key__"] # Seems not used
+            vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+               for k, v in batch["vae_results"].items()}
         else:
             raise ValueError(f"Not found valid keys: {batch.keys()}")
 
-        fnames = batch["__key__"]
         data_time_meter.update(time.time() - end)
 
         # Obtain proxy codes
@@ -392,7 +394,7 @@ def train_one_epoch(config, logger, accelerator,
             global_step, config.training.max_train_steps)
 
         with accelerator.accumulate([model, loss_module]):
-            reconstructed_images, extra_results_dict = model(images, dino_input=dino_input)
+            reconstructed_images, extra_results_dict = model(images, dino_input=dino_input, vae_results=vae_results)
             # reconstructed_images.shape: [batch_size, 1024, H, W]
             if proxy_codes is None:
                 autoencoder_loss, loss_dict = loss_module(
@@ -546,6 +548,7 @@ def train_one_epoch(config, logger, accelerator,
                     model,
                     log_images,
                     log_dino_input,
+                    log_vae_results,
                     log_fnames,
                     accelerator,
                     global_step + 1,
@@ -860,6 +863,8 @@ def eval_loss(
         dino_input = batch["dino_input"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
+        vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+               for k, v in batch["vae_results"].items()}
         if pretrained_tokenizer is not None:
             pretrained_tokenizer.eval()
             proxy_codes = pretrained_tokenizer.encode(images)
@@ -869,7 +874,7 @@ def eval_loss(
         rate_losses = []  # Track rate losses for each rate
         
         for i, fixed_mask_rate_val in enumerate(decode_mask_rates):
-            reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True)
+            reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
             # compare with ground truth
             if proxy_codes is None:
                 _, loss_dict = loss_module(
@@ -912,7 +917,6 @@ def eval_loss(
 
         # Stack losses to find minimum per sample
         sample_losses = torch.stack(sample_losses, dim=1) # [B, num_rates]
-        print(sample_losses.shape)
         reconstruction_losses = torch.stack(reconstruction_losses, dim=1) # [B, num_rates]
         recon_error_matrix.append(reconstruction_losses)
         rate_losses = torch.stack(rate_losses, dim=1) # [B, num_rates]
@@ -982,11 +986,13 @@ def eval_reconstruction(
         dino_input = batch["dino_input"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
+        vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+               for k, v in batch["vae_results"].items()}
         images_lists = []
         original_images = torch.clone(images)
         original_images = torch.clamp(original_images, 0.0, 1.0)
         for fixed_mask_rate_val in decode_mask_rates:
-            reconstructed_images, model_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True)
+            reconstructed_images, model_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
             if pretrained_tokenizer is not None:
                 reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
             reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
@@ -1002,7 +1008,7 @@ def eval_reconstruction(
 
 
 @torch.no_grad()
-def reconstruct_images(model, original_images, dino_input, fnames, accelerator, 
+def reconstruct_images(model, original_images, dino_input, vae_results, fnames, accelerator, 
                     global_step, output_dir, logger, config=None,
                     pretrained_tokenizer=None):
     logger.info("Reconstructing images...")
@@ -1023,14 +1029,14 @@ def reconstruct_images(model, original_images, dino_input, fnames, accelerator,
     mask_rate_list = [i / 16 for i in range(17)]
     for decode_mask_rate_val in mask_rate_list:
         with torch.autocast("cuda", dtype=dtype, enabled=accelerator.mixed_precision != "no"):
-            reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True)
+            reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
         if pretrained_tokenizer is not None:
             reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
         reconstructed_images_list.append(reconstructed_images)
 
     vis_dict = {}
     if local_model.use_policy:
-        reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input)
+        reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, vae_results=vae_results)
         if pretrained_tokenizer is not None:
             reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
         reconstructed_images_list.append(reconstructed_images)

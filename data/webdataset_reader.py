@@ -86,6 +86,27 @@ class DinoTransform:
         
     def dino_transform(self, x):
         return self.processor(x, return_tensors="pt").pixel_values[0]
+    
+class VAETransform:
+    def __init__(self):
+        self.transform = transforms.Compose([
+            transforms.Resize((64, 64)),  # Resize to 64x64
+            transforms.ToTensor(),  # Convert PIL image to tensor and scale to [0,1]
+            transforms.Lambda(lambda x: x * 255)  # Scale back to [0,255] range
+        ])
+        
+    def vae_transform(self, x):
+        return self.transform(x)
+
+class VAEResults:
+    def __init__(self):
+        self.stats = json.load(open("vae_results.json"))
+
+    def get(self, x):
+        avg_dict = {"elbo_avg": 2.04, "distortion_avg": 0.94, "rate_avg": 1.10}
+        sample_dict = self.stats[x] if x in self.stats else {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
+        sample_dict.update(avg_dict)
+        return sample_dict
 
 
 class SimpleImageDataset:
@@ -124,21 +145,28 @@ class SimpleImageDataset:
             resize_shorter_edge, crop_size, random_crop, random_flip,
             normalize_mean, normalize_std)
         dino_transform = DinoTransform()
+        vae_transform = VAETransform()
+        vae_results = VAEResults()
 
         train_processing_pipeline = [
             wds.decode(wds.autodecode.ImageHandler("pil", extensions=["webp", "png", "jpg", "jpeg"])),
             wds.rename(
                 image="jpg;png;jpeg;webp",
+                vae_input="jpg;png;jpeg;webp",
                 dino_input="jpg;png;jpeg;webp",
                 class_id="cls",
                 handler=wds.warn_and_continue,
+                __key__="__key__",
+                vae_results="__key__"
                 ),
-            wds.map(filter_keys(set(["image", "class_id", "filename", "dino_input"]))),
+            wds.map(filter_keys(set(["image", "class_id", "filename", "dino_input", "vae_input", "__key__", "vae_results"]))),
             wds.map_dict(
                 image=transform.train_transform,
                 dino_input=dino_transform.dino_transform,
+                vae_input=vae_transform.vae_transform,
                 class_id=lambda x: int(x),
                 handler=wds.warn_and_continue,
+                vae_results=lambda x: vae_results.get(x),
             ),
         ]
 
@@ -148,14 +176,19 @@ class SimpleImageDataset:
                 image="jpg;png;jpeg;webp",
                 class_id="cls",
                 dino_input="jpg;png;jpeg;webp",
+                vae_input="jpg;png;jpeg;webp",
                 handler=wds.warn_and_continue,
+                __key__="__key__",
+                vae_results="__key__"
                 ),
-            wds.map(filter_keys(set(["image", "class_id", "filename", "dino_input"]))),
+            wds.map(filter_keys(set(["image", "class_id", "filename", "dino_input", "vae_input", "__key__", "vae_results"]))),
             wds.map_dict(
                 image=transform.eval_transform,
                 dino_input=dino_transform.dino_transform,
+                vae_input=vae_transform.vae_transform,
                 class_id=lambda x: int(x),
                 handler=wds.warn_and_continue,
+                vae_results=lambda x: vae_results.get(x),
             ),
         ]
 
