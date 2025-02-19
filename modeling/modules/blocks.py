@@ -442,6 +442,7 @@ class PolicyNet(nn.Module):
                 annealing_factor=1.0,
                 gaussian_sampling_sigma=1.0,
                 use_pairwise: bool=False,
+                vae_results: dict = None, # For pre-get NLL to constrain the mask rate
         ):
         # DEBUG: print parameter norm of logit_head
         # print("\033[91mCHECK parameter norm of logit_head", self.logit_head.weight.norm(), "\033[0m")

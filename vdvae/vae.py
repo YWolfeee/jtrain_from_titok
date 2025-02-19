@@ -235,8 +235,8 @@ class VAE(HModule):
         for statdict in stats:
             rate_per_pixel += statdict['kl'].sum(dim=(1, 2, 3))
         rate_per_pixel /= ndims
-        elbo = (distortion_per_pixel + rate_per_pixel).mean()
-        return dict(elbo=elbo, distortion=distortion_per_pixel.mean(), rate=rate_per_pixel.mean())
+        elbo = (distortion_per_pixel + rate_per_pixel)
+        return dict(elbo=elbo, distortion=distortion_per_pixel, rate=rate_per_pixel)
 
     def forward_get_latents(self, x):
         activations = self.encoder.forward(x)
