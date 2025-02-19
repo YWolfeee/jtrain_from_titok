@@ -397,7 +397,7 @@ class PolicyNet(nn.Module):
             "model_type must be either mlp / transformer / causal_transformer"
         
         if self.model_type == "mlp":
-            self.fc1 = nn.Linear(self.in_channels, self.in_channels)
+            self.fc1 = nn.Linear(self.in_channels, self.hidden_size)
 
         elif self.model_type == "transformer" or self.model_type == "causal_transformer":
             self.num_heads = config.model.reconstruction_regularization.policy.num_heads
