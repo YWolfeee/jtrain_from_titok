@@ -14,14 +14,14 @@ source ~/.bashrc
 
 config_name="titok_b256_4096_12"
 model_type="transformer"
-tag="debug_gaussian_nan"
+tag="gen_vae_dict"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
-# accelerate launch \
-#     --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
-#     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
 python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
+accelerate launch \
+    --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
+    --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
     experiment.name="${config_name}_${tag}" \
@@ -41,8 +41,8 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
-    model.reconstruction_regularization.policy.rate_weight=1 \
-    model.reconstruction_regularization.policy.use_pairwise=True \
+    model.reconstruction_regularization.policy.rate_weight=0 \
+    model.reconstruction_regularization.policy.use_pairwise=False \
     \
     model.reconstruction_regularization.use_gumbel_softmax=False \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
@@ -61,6 +61,10 @@ python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=False \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
+    model.reconstruction_regularization.policy.elbo.nll_only=True \
+    model.reconstruction_regularization.policy.elbo.mean=0.5 \
+    model.reconstruction_regularization.policy.elbo.lower=0.2 \
+    model.reconstruction_regularization.policy.elbo.upper=1.0 \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \

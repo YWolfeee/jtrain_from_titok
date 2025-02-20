@@ -130,7 +130,6 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 actor_loss = reward * torch.clip(logprob1 - logprob2, -10, 10)
 
             else:
-                critic_loss = reconstruction_loss + self.rate_weight * rate_loss
                 reward = critic_loss.detach()
                 actor_loss = reward * extra_input_dict["logprob_mask"]
 

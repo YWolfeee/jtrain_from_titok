@@ -13,8 +13,8 @@ lr=$3 # 2e-4
 use_reconstruction_regularization=$4 # True
 use_ours=$5
 rate_weight=$6
-policy_network=$7
-alpha_start=$8
+elbo_lower=$7
+elbo_upper=$8
 output_root=$9
 job_name=${10}         # Use as output dir
 
@@ -27,13 +27,13 @@ cd /joint_training/jtrain_from_titok
 export PYTHONPATH='/joint_training/jtrain_from_titok'
 
 
-if awk "BEGIN {exit !($alpha_start > 1)}"; then
-    use_annealing=False
-    alpha_start=0
-else
-    use_annealing=True
-fi
-echo "use_annealing=${use_annealing}, alpha_start=${alpha_start}"
+# if awk "BEGIN {exit !($alpha_start > 1)}"; then
+#     use_annealing=False
+#     alpha_start=0
+# else
+#     use_annealing=True
+# fi
+# echo "use_annealing=${use_annealing}, alpha_start=${alpha_start}"
 
 accelerate launch \
     --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
@@ -51,12 +51,12 @@ accelerate launch \
     \
     model.reconstruction_regularization.use_policy=${use_ours} \
     model.reconstruction_regularization.policy.rate_weight=${rate_weight} \
-    model.reconstruction_regularization.policy.model_type=${policy_network} \
+    model.reconstruction_regularization.policy.model_type='transformer' \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
     model.reconstruction_regularization.policy.use_advantage=False \
-    model.reconstruction_regularization.policy.use_pairwise=True \
+    model.reconstruction_regularization.policy.use_pairwise=False \
     \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
@@ -65,8 +65,8 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=${use_annealing} \
-    model.reconstruction_regularization.policy.annealing.alpha_start=${alpha_start} \
+    model.reconstruction_regularization.policy.annealing.use_annealing=False \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     \
     model.reconstruction_regularization.policy.temperature.use_T=False \
@@ -75,6 +75,11 @@ accelerate launch \
     \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=False \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
+    \
+    model.reconstruction_regularization.policy.elbo.nll_only=True \
+    model.reconstruction_regularization.policy.elbo.mean=0.5 \
+    model.reconstruction_regularization.policy.elbo.lower=${elbo_lower} \
+    model.reconstruction_regularization.policy.elbo.upper=${elbo_upper} \
     \
     training.per_gpu_batch_size=${per_gpu_batch_size} \
     optimizer.params.learning_rate=${lr} \

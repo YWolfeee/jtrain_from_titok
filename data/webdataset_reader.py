@@ -103,8 +103,8 @@ class VAEResults:
         self.stats = json.load(open("vae_results.json"))
 
     def get(self, x):
-        avg_dict = {"elbo_avg": 2.04, "distortion_avg": 0.94, "rate_avg": 1.10}
-        sample_dict = self.stats[x] if x in self.stats else {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
+        avg_dict = {"elbo_avg": 2.0415, "distortion_avg": 0.9380, "rate_avg": 1.1035}
+        sample_dict = self.stats[x] if x in self.stats else {"elbo": 2.0415, "distortion": 0.9380, "rate": 1.1035}
         sample_dict.update(avg_dict)
         return sample_dict
 
