@@ -68,8 +68,8 @@ accelerate launch \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \
-    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
-    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
+    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000320}.tar' \
+    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
     
     # experiment.init_weight="results_try_new_design/gaussian+rate_weight=1+policy_network=transformer+anneal_policy+alpha_start=2/checkpoint-30000/unwrapped_model/pytorch_model.bin"
 
