@@ -104,7 +104,11 @@ class VAEResults:
 
     def get(self, x):
         avg_dict = {"elbo_avg": 2.04, "distortion_avg": 0.94, "rate_avg": 1.10}
-        sample_dict = self.stats[x] if x in self.stats else {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
+        dummy_dict = {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
+        sample_dict = self.stats[x] if x in self.stats else dummy_dict
+        for key in sample_dict:
+            if sample_dict[key] == 0.0:
+                sample_dict[key] = dummy_dict[key]
         sample_dict.update(avg_dict)
         return sample_dict
 
