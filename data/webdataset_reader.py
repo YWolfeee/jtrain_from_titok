@@ -100,6 +100,7 @@ class VAETransform:
 
 class VAEResults:
     def __init__(self):
+<<<<<<< HEAD
         self.stats_train = json.load(open("vae_results_train.json"))
         self.stats_eval = json.load(open("vae_results_eval.json"))
     
@@ -120,6 +121,13 @@ class VAEResults:
         for key in sample_dict:
             if sample_dict[key] == 0.0:
                 sample_dict[key] = dummy_dict[key]
+=======
+        self.stats = json.load(open("vae_results.json"))
+
+    def get(self, x):
+        avg_dict = {"elbo_avg": 2.0415, "distortion_avg": 0.9380, "rate_avg": 1.1035}
+        sample_dict = self.stats[x] if x in self.stats else {"elbo": 2.0415, "distortion": 0.9380, "rate": 1.1035}
+>>>>>>> 64eff2db1fbcb0ad346500591de222f6cb6ab9e7
         sample_dict.update(avg_dict)
         return sample_dict
 

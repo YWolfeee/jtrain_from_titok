@@ -392,12 +392,21 @@ class PolicyNet(nn.Module):
         self.num_tokens = num_tokens
         self.hidden_size = config.model.reconstruction_regularization.policy.hidden_size
 
+        try: 
+            self.elbo = config.model.reconstruction_regularization.policy.elbo
+        except:
+            self.elbo = None
+        
+        if self.elbo.nll_only:
+            # In this case, no need for any neural network
+            return 
+        
         self.model_type = config.model.reconstruction_regularization.policy.model_type
         assert self.model_type in ["mlp", "transformer", "causal_transformer"], \
             "model_type must be either mlp / transformer / causal_transformer"
         
         if self.model_type == "mlp":
-            self.fc1 = nn.Linear(self.in_channels, self.in_channels)
+            self.fc1 = nn.Linear(self.in_channels, self.hidden_size)
 
         elif self.model_type == "transformer" or self.model_type == "causal_transformer":
             self.num_heads = config.model.reconstruction_regularization.policy.num_heads
@@ -446,6 +455,21 @@ class PolicyNet(nn.Module):
         ):
         # DEBUG: print parameter norm of logit_head
         # print("\033[91mCHECK parameter norm of logit_head", self.logit_head.weight.norm(), "\033[0m")
+        if self.elbo and self.elbo.nll_only:   
+            if vae_results is None:
+                elbo =  torch.ones((token_features.shape[0],)).to(
+                    token_features.device)
+            else:
+                elbo = vae_results['elbo'] / vae_results['elbo_avg']
+
+            elbo = (self.elbo.mean * elbo).clip(self.elbo.get('lower', 0.0), 
+                                                self.elbo.get('upper', 1.0))
+            return {
+                "sampled_mask_rate": elbo,
+                "mask_rate_value": elbo,
+                "logprob_mask": elbo,
+            }
+
         if self.model_type == "mlp":
             global_token = token_features[:, 0, :] # [B, C]
             x = nn.functional.gelu(self.fc1(global_token)) # Use the first global token [cls_token]

@@ -14,18 +14,18 @@ source ~/.bashrc
 
 config_name="titok_b256_4096_12"
 model_type="transformer"
-tag="debug_new_design_cat256"
+tag="gen_vae_dict"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
-# python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
+python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
 accelerate launch \
     --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
     experiment.name="${config_name}_${tag}" \
-    experiment.output_dir="temp/${config_name}_${tag}" \
+    experiment.output_dir="temp/${tag}" \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
@@ -41,18 +41,18 @@ accelerate launch \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
-    model.reconstruction_regularization.policy.rate_weight=1 \
-    model.reconstruction_regularization.policy.use_pairwise=True \
+    model.reconstruction_regularization.policy.rate_weight=0 \
+    model.reconstruction_regularization.policy.use_pairwise=False \
     \
     model.reconstruction_regularization.use_gumbel_softmax=False \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=True \
+    model.reconstruction_regularization.policy.annealing.use_annealing=False \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.02 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
-    model.reconstruction_regularization.policy.logit_head_type="categorical_8" \
+    model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
     \
     model.reconstruction_regularization.policy.temperature.use_T=False \
     model.reconstruction_regularization.policy.temperature.T0=10000 \
@@ -61,14 +61,17 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=False \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
+    model.reconstruction_regularization.policy.elbo.nll_only=True \
+    model.reconstruction_regularization.policy.elbo.mean=0.5 \
+    model.reconstruction_regularization.policy.elbo.lower=0.2 \
+    model.reconstruction_regularization.policy.elbo.upper=1.0 \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000009}.tar' \
-
-
-    # experiment.init_weight="results_try_tradeoff_with_activation/titok+config=titok_b${shape}_4096_12/checkpoint-250000/unwrapped_model/pytorch_model.bin"
+    
+    # experiment.init_weight="results_try_new_design/gaussian+rate_weight=1+policy_network=transformer+anneal_policy+alpha_start=2/checkpoint-30000/unwrapped_model/pytorch_model.bin"
 
     # \
     # dataset.params.train_shards_path_or_url='small_datasets/imagenet-train-000000.tar' \
