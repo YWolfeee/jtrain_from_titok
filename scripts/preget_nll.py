@@ -170,12 +170,13 @@ def main():
     state_dict = new_state_dict
     model.load_state_dict(state_dict)
 
-    _, _, train_eval_dataloader = create_dataloader(config, logger, accelerator)
+    train_dataloader, eval_dataloader, train_eval_dataloader = create_dataloader(config, logger, accelerator)
 
     # Prepare everything with accelerator.
     logger.info("Preparing model, optimizer and dataloaders")
     # The dataloader are already aware of distributed training, so we don't need to prepare them.
-    model, train_eval_dataloader = accelerator.prepare(model, train_eval_dataloader)
+    # model, train_dataloader, eval_dataloader, train_eval_dataloader = accelerator.prepare(model, train_dataloader, eval_dataloader, train_eval_dataloader)
+    model = accelerator.prepare(model)
 
     total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
     num_batches = math.ceil(
@@ -197,17 +198,27 @@ def main():
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
             stats_dict = json.load(f)
+
+    logger.info("Successfully loaded stats with length", len(list(stats_dict.keys())))
     
     # One-time forward pass to get the stats
-    for i, batch in enumerate(train_eval_dataloader):
+    for i, batch in enumerate(train_dataloader):
+        
         model.eval()
+        # Get filenames from batch
+        fnames = batch['__key__']
+        # Skip batch if all filenames already processed
+        if all(fname in stats_dict for fname in fnames):
+            logger.info(f"Processed {i} batches, Skipped")
+            continue
+        else:
+            logger.info(f"Start processing {i} batches")
+                
+        # Get vae_input from batch
         vae_input = batch['vae_input'].permute(0, 2, 3, 1).contiguous().to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
         inp, out = preprocess_fn(vae_input)
         with torch.no_grad():
             stats = model.forward(inp, out)
-        
-        # Get filenames from batch
-        fnames = batch['__key__']
         
         # Gather stats and filenames from all processes
         gathered_fnames = fnames
@@ -226,17 +237,16 @@ def main():
                         sample_stats[key] = gathered_stats[key][j].item()
                 stats_dict[fname] = sample_stats
                 
-            # Save stats after each batch
-            with open(stats_file, "w") as f:
-                json.dump(stats_dict, f)
-
-            print(stats_dict)
-            assert False
-                
-            if i % 1000 == 0:
-                logger.info(f"Processed {i} batches")
+            if i % 100 == 0:
                 logger.info(f"Gather stats: {gathered_stats}")
+                # Save stats after each 100 batch
+                with open(stats_file, "w") as f:
+                    json.dump(stats_dict, f)
         
+    # Save stats after each batch
+    with open(stats_file, "w") as f:
+        json.dump(stats_dict, f)
+    
     logger.info("***** End VAE Inference *****")
 
     accelerator.wait_for_everyone()

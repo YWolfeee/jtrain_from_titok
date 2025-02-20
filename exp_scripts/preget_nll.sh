@@ -1,9 +1,9 @@
 #PBS -N preget_nll
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=4:mem=180gb:ngpus=4:host=cvml06
+#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml10
 
 config_name='titok_b128_4096_12'
-tag="preget_nll_trial_distributed_dataset_test"
+tag="preget_nll_trial" # tag="preget_nll_trial_distributed_dataset_test"
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -23,4 +23,4 @@ WANDB_MODE=offline accelerate launch \
     experiment.output_dir="temp/${tag}" \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000252}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000009}.tar" \
-    training.per_gpu_batch_size=16
+    training.per_gpu_batch_size=32
