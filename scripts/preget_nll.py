@@ -223,8 +223,6 @@ def main():
         
         # Skip batch if all filenames already processed
         if all(fname in stats_dict for fname in fnames):
-            print(skipped)
-            assert False
             logger.info(f"Processed {i} batches, Skipped")
             continue
         else:
