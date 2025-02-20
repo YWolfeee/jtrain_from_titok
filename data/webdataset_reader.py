@@ -100,33 +100,25 @@ class VAETransform:
 
 class VAEResults:
     def __init__(self):
-        if "vae_results_train.json" in os.listdir():
-            self.stats_train = json.load(open("vae_results_train.json"))
-        else:
-            self.stats_train = {}
-        if "vae_results_eval.json" in os.listdir():
-            self.stats_eval = json.load(open("vae_results_eval.json"))
-        else:
-            self.stats_eval = {}
+        self.stats_train = json.load(open("vae_results_train.json"))
+        self.stats_eval = json.load(open("vae_results_eval.json"))
+        self.avg_dict = {"elbo_avg": 2.0412, "distortion_avg": 0.9382, "rate_avg": 1.1030}
+        self.dummy_dict = {"elbo": 2.0412, "distortion": 0.9382, "rate": 1.1030}
     
     def get_train(self, x):
-        avg_dict = {"elbo_avg": 2.04, "distortion_avg": 0.94, "rate_avg": 1.10}
-        dummy_dict = {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
-        sample_dict = self.stats_train[x] if x in self.stats else dummy_dict
+        sample_dict = self.stats_train[x] if x in self.stats else self.dummy_dict
         for key in sample_dict:
             if sample_dict[key] == 0.0:
-                sample_dict[key] = dummy_dict[key]
-        sample_dict.update(avg_dict)
+                sample_dict[key] = self.dummy_dict[key]
+        sample_dict.update(self.avg_dict)
         return sample_dict
 
     def get_eval(self, x):
-        avg_dict = {"elbo_avg": 2.04, "distortion_avg": 0.94, "rate_avg": 1.10}
-        dummy_dict = {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
-        sample_dict = self.stats_eval[x] if x in self.stats else dummy_dict
+        sample_dict = self.stats_eval[x] if x in self.stats else self.dummy_dict
         for key in sample_dict:
             if sample_dict[key] == 0.0:
-                sample_dict[key] = dummy_dict[key]
-        sample_dict.update(avg_dict)
+                sample_dict[key] = self.dummy_dict[key]
+        sample_dict.update(self.avg_dict)
         return sample_dict
 
 
