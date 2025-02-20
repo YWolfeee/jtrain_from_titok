@@ -21,6 +21,7 @@ import math
 import os
 from pathlib import Path
 import json
+import itertools
 from accelerate.utils import set_seed
 from accelerate import Accelerator
 
@@ -175,7 +176,7 @@ def main():
     # Prepare everything with accelerator.
     logger.info("Preparing model, optimizer and dataloaders")
     # The dataloader are already aware of distributed training, so we don't need to prepare them.
-    # model, train_dataloader, eval_dataloader, train_eval_dataloader = accelerator.prepare(model, train_dataloader, eval_dataloader, train_eval_dataloader)
+    model, train_dataloader, eval_dataloader, train_eval_dataloader = accelerator.prepare(model, train_dataloader, eval_dataloader, train_eval_dataloader)
     model = accelerator.prepare(model)
 
     total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
@@ -198,17 +199,32 @@ def main():
     if os.path.exists(stats_file):
         with open(stats_file, "r") as f:
             stats_dict = json.load(f)
+            logger.info(f"Successfully loaded stats with length {len(list(stats_dict.keys()))}")
 
-    logger.info("Successfully loaded stats with length", len(list(stats_dict.keys())))
-    
     # One-time forward pass to get the stats
-    for i, batch in enumerate(train_dataloader):
+    try:
+        if config.dataset_split == "eval":
+            iter_dataloader = eval_dataloader
+        else:
+            iter_dataloader = train_eval_dataloader
+    except:
+        iter_dataloader = train_eval_dataloader
+
+    model.eval()
+    
+    for i, batch in enumerate(iter_dataloader):
+        if i < config.start_batch:
+            logger.info(f"Skipping {i} batches, not for GPU")
+            continue
         
-        model.eval()
         # Get filenames from batch
         fnames = batch['__key__']
+        print(fnames)
+        
         # Skip batch if all filenames already processed
         if all(fname in stats_dict for fname in fnames):
+            print(skipped)
+            assert False
             logger.info(f"Processed {i} batches, Skipped")
             continue
         else:
@@ -236,14 +252,13 @@ def main():
                     else:
                         sample_stats[key] = gathered_stats[key][j].item()
                 stats_dict[fname] = sample_stats
-                
-            if i % 100 == 0:
-                logger.info(f"Gather stats: {gathered_stats}")
-                # Save stats after each 100 batch
-                with open(stats_file, "w") as f:
-                    json.dump(stats_dict, f)
-        
-    # Save stats after each batch
+            
+        if i % 100 == 0:
+            logger.info(f"Gather stats: {gathered_stats}")
+            # Save stats after each 100 batch
+            with open(stats_file, "w") as f:
+                json.dump(stats_dict, f)
+
     with open(stats_file, "w") as f:
         json.dump(stats_dict, f)
     

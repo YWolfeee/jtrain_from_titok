@@ -100,12 +100,23 @@ class VAETransform:
 
 class VAEResults:
     def __init__(self):
-        self.stats = json.load(open("vae_results.json"))
-
-    def get(self, x):
+        self.stats_train = json.load(open("vae_results_train.json"))
+        self.stats_eval = json.load(open("vae_results_eval.json"))
+    
+    def get_train(self, x):
         avg_dict = {"elbo_avg": 2.04, "distortion_avg": 0.94, "rate_avg": 1.10}
         dummy_dict = {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
-        sample_dict = self.stats[x] if x in self.stats else dummy_dict
+        sample_dict = self.stats_train[x] if x in self.stats else dummy_dict
+        for key in sample_dict:
+            if sample_dict[key] == 0.0:
+                sample_dict[key] = dummy_dict[key]
+        sample_dict.update(avg_dict)
+        return sample_dict
+
+    def get_eval(self, x):
+        avg_dict = {"elbo_avg": 2.04, "distortion_avg": 0.94, "rate_avg": 1.10}
+        dummy_dict = {"elbo": 2.04, "distortion": 0.94, "rate": 1.10}
+        sample_dict = self.stats_eval[x] if x in self.stats else dummy_dict
         for key in sample_dict:
             if sample_dict[key] == 0.0:
                 sample_dict[key] = dummy_dict[key]
@@ -170,7 +181,7 @@ class SimpleImageDataset:
                 vae_input=vae_transform.vae_transform,
                 class_id=lambda x: int(x),
                 handler=wds.warn_and_continue,
-                vae_results=lambda x: vae_results.get(x),
+                vae_results=lambda x: vae_results.get_train(x),
             ),
         ]
 
@@ -192,7 +203,7 @@ class SimpleImageDataset:
                 vae_input=vae_transform.vae_transform,
                 class_id=lambda x: int(x),
                 handler=wds.warn_and_continue,
-                vae_results=lambda x: vae_results.get(x),
+                vae_results=lambda x: vae_results.get_eval(x),
             ),
         ]
 
@@ -249,7 +260,7 @@ class SimpleImageDataset:
             wds.SimpleShardList(train_shards_path),
             wds.split_by_worker,
             wds.tarfile_to_samples(handler=wds.ignore_and_continue),
-            *test_processing_pipeline,
+            *train_processing_pipeline,
             wds.batched(per_gpu_batch_size, partial=True, collation_fn=default_collate),
         ]
         self._train_eval_dataset = wds.DataPipeline(*pipeline)
