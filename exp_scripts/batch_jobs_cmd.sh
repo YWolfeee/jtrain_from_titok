@@ -38,8 +38,8 @@ for config_file in "${config_files[@]}"; do
         # Evaluate the settings to create variables dynamically
         # eval $setting
     for use_ours in "True"; do
-        for elbo_upper in 0.5; do
-            for elbo_lower in 0.5; do
+        for elbo_upper in 1.0; do
+            for elbo_lower in 0.2; do
                 for rate_weight in 1; do    
         # elbo_upper=0.0
         # elbo_lower="mlp"

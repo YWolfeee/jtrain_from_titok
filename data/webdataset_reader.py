@@ -106,18 +106,12 @@ class VAEResults:
         self.dummy_dict = {"elbo": 2.0412, "distortion": 0.9382, "rate": 1.1030}
     
     def get_train(self, x):
-        sample_dict = self.stats_train[x] if x in self.stats else self.dummy_dict
-        for key in sample_dict:
-            if sample_dict[key] == 0.0:
-                sample_dict[key] = self.dummy_dict[key]
+        sample_dict = self.stats_train[x] if x in self.stats_train else self.dummy_dict
         sample_dict.update(self.avg_dict)
         return sample_dict
 
     def get_eval(self, x):
-        sample_dict = self.stats_eval[x] if x in self.stats else self.dummy_dict
-        for key in sample_dict:
-            if sample_dict[key] == 0.0:
-                sample_dict[key] = self.dummy_dict[key]
+        sample_dict = self.stats_eval[x] if x in self.stats_eval else self.dummy_dict
         sample_dict.update(self.avg_dict)
         return sample_dict
 
