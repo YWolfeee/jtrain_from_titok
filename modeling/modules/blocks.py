@@ -462,11 +462,12 @@ class PolicyNet(nn.Module):
             else:
                 elbo = vae_results['elbo'] / vae_results['elbo_avg']
 
-            elbo = (self.elbo.mean * elbo).clip(self.elbo.get('lower', 0.0), 
-                                                self.elbo.get('upper', 1.0))
+            mask_rate = 1 - self.elbo.mean * elbo
+            mask_rate = mask_rate.clip(self.elbo.get('lower', 0.0), 
+                                       self.elbo.get('upper', 1.0))
             return {
-                "sampled_mask_rate": elbo,
-                "mask_rate_value": elbo,
+                "sampled_mask_rate": mask_rate,
+                "mask_rate_value": mask_rate,
                 "logprob_mask": elbo,
             }
 
