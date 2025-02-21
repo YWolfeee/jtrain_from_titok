@@ -107,7 +107,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                            mode: str = "with_ground_truth"
                            ) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
         reconstructions = reconstructions.contiguous()
-        if mode == "with_policy":
+        if mode == "with_policy" or mode == "with_policy_eval":
             batch_size = reconstructions.shape[0]
 
             if self.use_pairwise:
@@ -122,7 +122,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                
             if self.config.model.reconstruction_regularization.use_gumbel_softmax: # The reinforce framework
                 actor_loss = torch.zeros_like(critic_loss)
-            elif self.use_pairwise:
+            elif self.use_pairwise and mode != "with_policy_eval":
                 critic_loss1, critic_loss2 = critic_loss.chunk(2)
                 logprob1, logprob2 = extra_input_dict["logprob_mask"].chunk(2)
 
@@ -143,6 +143,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                 reconstruction_loss=reconstruction_loss.mean().detach(),
                 reconstruction_loss_unreduced=reconstruction_loss.detach(),
                 rate_loss=rate_loss.mean().detach(),
+                rate_loss_unreduced=rate_loss.detach(),
                 rate_std=rate_loss.std().detach(),  # sample wise variance
                 actor_loss=actor_loss.detach(),
                 critic_loss=critic_loss.detach(),
@@ -163,6 +164,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
 
         else:
             raise ValueError(f"Unsupported loss mode {mode}")
+        
         total_loss = reconstruction_loss.mean() + \
             self.quantizer_weight * extra_input_dict["quantizer_loss"]
 

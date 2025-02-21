@@ -1,12 +1,12 @@
-#PBS -N titok_reinforce
+#PBS -N zexp_new_design_test
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=4:mem=180gb:ngpus=4:host=cvml11
+#PBS -l select=1:ncpus=12:mem=90gb:ngpus=2:host=cvml10
 
 config_name='titok_b128_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
 rate_weight=1000
-tag="rate_weight_test_with_layer_norm_${model_type}_${logit_head_type}_rate_weight=${rate_weight}"
+tag="test_eval_logloss"
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -22,8 +22,8 @@ accelerate launch \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
-    experiment.name="${tag}" \
-    experiment.output_dir="temp/${config_name}_${tag}" \
+    experiment.name="${config_name}_${tag}" \
+    experiment.output_dir="temp/${tag}" \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
@@ -39,15 +39,15 @@ accelerate launch \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
     \
-    model.reconstruction_regularization.policy.rate_weight=${rate_weight} \
-    model.reconstruction_regularization.policy.use_pairwise=True \
+    model.reconstruction_regularization.policy.rate_weight=0 \
+    model.reconstruction_regularization.policy.use_pairwise=False \
     \
     model.reconstruction_regularization.use_gumbel_softmax=False \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
     model.reconstruction_regularization.policy.annealing.use_annealing=False \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.02 \
     model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
@@ -59,9 +59,12 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=False \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
+    model.reconstruction_regularization.policy.elbo.nll_only=True \
+    model.reconstruction_regularization.policy.elbo.mean=0.5 \
+    model.reconstruction_regularization.policy.elbo.lower=0.2 \
+    model.reconstruction_regularization.policy.elbo.upper=1.0 \
     training.per_gpu_batch_size=32 \
     optimizer.params.learning_rate=1e-4 \
     training.max_train_steps=250_000 \
-    losses.use_self_distilliation=False \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000049}.tar" \

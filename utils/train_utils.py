@@ -572,7 +572,7 @@ def train_one_epoch(config, logger, accelerator,
                     pretrained_tokenizer=pretrained_tokenizer
                 )
                 logger.info(pprint.pformat(eval_loss_dict))
-                eval_loss_log = {f'eval_loss/'+k: v for k, v in eval_loss_dict.items()}
+                eval_loss_log = {'eval_loss/'+k: v for k, v in eval_loss_dict.items()}
                 accelerator.log(eval_loss_log, step=global_step + 1)
                 import numpy as np
                 recon_matrix = recon_matrix.cpu().numpy()
@@ -582,7 +582,7 @@ def train_one_epoch(config, logger, accelerator,
 
             # Evaluate reconstruction.
             if eval_dataloader is not None and (global_step + 1) % config.experiment.eval_every == 0:
-                logger.info(f"Computing metrics on the validation set.")
+                logger.info("Computing metrics on the validation set.")
                 if config.training.get("use_ema", False):
                     ema_model.store(model.parameters())
                     ema_model.copy_to(model.parameters())
@@ -601,7 +601,7 @@ def train_one_epoch(config, logger, accelerator,
                             f"Step: {global_step + 1} "
                         )
                         logger.info(
-                            f"Compared to ground truth"
+                            "Compared to ground truth"
                         )
                         logger.info(pprint.pformat(eval_scores[i]))
                         
@@ -620,7 +620,7 @@ def train_one_epoch(config, logger, accelerator,
                             f"Step: {global_step + 1} "
                         )
                         logger.info(
-                            f"Compared to ground truth"
+                            "Compared to ground truth"
                         )
                         logger.info(pprint.pformat(eval_scores[i]))
                         
@@ -838,6 +838,25 @@ def train_one_epoch_generator(
 
     return global_step
 
+def _add_losses_into_dict(
+        prefix,
+        eval_loss_dict,
+        reconstruction_loss,
+        rate_loss,
+        total_loss
+):
+    # To match previous logout, replace total_loss to loss when prefix is optimal
+    loss_types = ["reconstruction_loss", "rate_loss", "total_loss"]
+    if prefix == "optimal":
+        loss_types[-1] = "loss"
+    loss_values = [reconstruction_loss, rate_loss, total_loss]
+    
+    for loss_type, loss_value in zip(loss_types, loss_values):
+        key = f"{prefix}_{loss_type}"
+        if key not in eval_loss_dict:
+            eval_loss_dict[key] = []
+        eval_loss_dict[key].append(loss_value)
+
 @torch.no_grad()
 def eval_loss(
     model,
@@ -894,21 +913,11 @@ def eval_loss(
             
             # Store original metrics
             current_key = f"{(1 - decode_mask_rates[i]) * 100}%_vs_gt"
-            # Initialize lists in dict if they don't exist
-            if current_key + "_reconstruction_loss" not in eval_loss_dict:
-                eval_loss_dict[current_key + "_reconstruction_loss"] = []
-            if current_key + "_rate_loss" not in eval_loss_dict:
-                eval_loss_dict[current_key + "_rate_loss"] = []
-            if current_key + "_total_loss" not in eval_loss_dict:
-                eval_loss_dict[current_key + "_total_loss"] = []
 
             reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss_unreduced"])
             rate_loss = loss_module.rate_weight * (1 - fixed_mask_rate_val) * torch.ones_like(reconstruction_loss)
             total_loss = reconstruction_loss + rate_loss
-            
-            eval_loss_dict[current_key + "_reconstruction_loss"].append(reconstruction_loss)
-            eval_loss_dict[current_key + "_rate_loss"].append(rate_loss) 
-            eval_loss_dict[current_key + "_total_loss"].append(total_loss)
+            _add_losses_into_dict(current_key, eval_loss_dict, reconstruction_loss, rate_loss, total_loss)
             
             # Track per-sample losses for finding minimum
             sample_losses.append(total_loss)
@@ -922,23 +931,34 @@ def eval_loss(
         rate_losses = torch.stack(rate_losses, dim=1) # [B, num_rates]
         
         min_losses, min_indices = torch.min(sample_losses, dim=1) # [B]
-        
-        # Get reconstruction and rate losses at optimal points
-        batch_indices = torch.arange(min_indices.size(0), device=min_indices.device)
+        batch_indices = torch.arange(min_indices.size(0), device=min_indices.device)  # Get reconstruction and rate losses at optimal points
         optimal_reconstruction_losses = reconstruction_losses[batch_indices, min_indices]
         optimal_rate_losses = rate_losses[batch_indices, min_indices]
-
-        # Add minimal loss statistics to eval_dict
-        if "optimal_loss" not in eval_loss_dict:
-            eval_loss_dict["optimal_loss"] = []
-        if "optimal_reconstruction_loss" not in eval_loss_dict:
-            eval_loss_dict["optimal_reconstruction_loss"] = []
-        if "optimal_rate_loss" not in eval_loss_dict:
-            eval_loss_dict["optimal_rate_loss"] = []
+        _add_losses_into_dict("optimal", eval_loss_dict, optimal_reconstruction_losses, optimal_rate_losses, min_losses)
+        
+        if local_model.use_policy:
+            reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, vae_results=vae_results)
+            # compare with ground truth
+            if proxy_codes is None:
+                _, loss_dict = loss_module(
+                    images,
+                    reconstructed_images,
+                    extra_results_dict,
+                    0, # ignore effect of global_step in this step
+                    mode="generator",
+                )
+            else:
+                _, loss_dict = loss_module(
+                    proxy_codes,
+                    reconstructed_images,
+                    extra_results_dict,
+                    mode="with_policy_eval"
+                )
             
-        eval_loss_dict["optimal_loss"].append(min_losses)
-        eval_loss_dict["optimal_reconstruction_loss"].append(optimal_reconstruction_losses)
-        eval_loss_dict["optimal_rate_loss"].append(optimal_rate_losses)
+            policy_reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss_unreduced"])
+            policy_rate_loss = accelerator.gather(loss_dict["rate_loss_unreduced"])
+            policy_total_loss = policy_reconstruction_loss + loss_module.rate_weight * policy_rate_loss
+            _add_losses_into_dict("policy", eval_loss_dict, policy_reconstruction_loss, policy_rate_loss, policy_total_loss)
 
         t += 1
 
