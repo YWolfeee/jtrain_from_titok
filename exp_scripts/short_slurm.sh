@@ -5,6 +5,7 @@
 #SBATCH --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training
 #SBATCH --container-image=/lustre/fsw/portfolios/dir/users/haotiany/docker_images/imaginaire4_v9.2.2.sqsh
 #SBATCH --gpus-per-node=8
+#SBATCH --nodes=4
 #SBATCH --time=4:00:00
 
 # nvidia-smi
@@ -14,13 +15,13 @@ source ~/.bashrc
 
 config_name="titok_b256_4096_12"
 model_type="transformer"
-tag="gen_vae_dict"
-ngpus=8
+tag="test_multi_node"
+ngpus=32
 export PYTHONPATH=$(pwd)
 
-python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
+# python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
 accelerate launch \
-    --num_machines=1 --num_processes=${ngpus} --machine_rank=0 \
+    --num_machines=4 --num_processes=${ngpus} --machine_rank=$SLURM_NODEID \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
@@ -36,7 +37,7 @@ accelerate launch \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
     \
-    model.reconstruction_regularization.use_policy=True \
+    model.reconstruction_regularization.use_policy=False \
     model.reconstruction_regularization.policy.model_type=${model_type} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
