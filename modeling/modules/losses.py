@@ -110,7 +110,7 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
         if mode == "with_policy" or mode == "with_policy_eval":
             batch_size = reconstructions.shape[0]
 
-            if self.use_pairwise:
+            if self.use_pairwise and mode != "with_policy_eval":
                 target_codes = torch.concat([target_codes, target_codes]) 
 
             reconstruction_loss = self.loss_fn(
