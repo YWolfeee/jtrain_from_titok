@@ -52,6 +52,8 @@ def const_min(t, constant):
 def discretized_mix_logistic_loss(x, l, low_bit=False):
     """ log-likelihood for mixture of discretized logistics, assumes the data has been rescaled to [-1,1] interval """
     # Adapted from https://github.com/openai/pixel-cnn/blob/master/pixel_cnn_pp/nn.py
+    print("In discretized_mix_logistic_loss:", f"x: [{x.min()}, {x.max()}], l: [{l.min(), {l.max()}}]")
+    print("In discretized_mix_logistic_loss:", f"x.shape: {x.shape}, l: {l.shape}")
     xs = [s for s in x.shape]  # true image (i.e. labels) to regress to, e.g. (B,32,32,3)
     ls = [s for s in l.shape]  # predicted distribution, e.g. (B,32,32,100)
     nr_mix = int(ls[-1] / 10)  # here and below: unpacking the params of the mixture of logistics

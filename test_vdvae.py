@@ -78,9 +78,11 @@ for i in range(8):
     ])
     img = transform(img).unsqueeze(0)  # Add batch dimension
     img = img.permute(0, 2, 3, 1).contiguous() # convert back to (B, H, W, C)
-
+    print(img.min(), img.max())
     # preprocess the image
     inp, out = preprocess_fn(img)
+    print(inp.min(), inp.max())
+    print(out.min(), out.max())
     # inp, out shape: (1, 64, 64, 3); mean = 0, std = 1
     vae = vae.cuda()
     stats = vae.forward(inp, out)

@@ -1,6 +1,6 @@
-#PBS -N preget_nll
+#PBS -N zexp_preget_nll
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=12:mem=90gb:ngpus=1:host=cvml10
+#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml11
 
 config_name='titok_b128_4096_12'
 start_batch=0
