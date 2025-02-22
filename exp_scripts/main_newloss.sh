@@ -17,6 +17,7 @@ elbo_lower=$7
 elbo_upper=$8
 output_root=$9
 job_name=${10}         # Use as output dir
+elbo_mode=${11}
 
 ngpus=8
 
@@ -77,6 +78,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
+    model.reconstruction_regularization.policy.elbo.elbo_mode=${elbo_mode} \
     model.reconstruction_regularization.policy.elbo.mean=0.5 \
     model.reconstruction_regularization.policy.elbo.lower=${elbo_lower} \
     model.reconstruction_regularization.policy.elbo.upper=${elbo_upper} \

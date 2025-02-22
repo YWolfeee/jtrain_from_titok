@@ -47,8 +47,9 @@ rate_weight=$6    # False
 elbo_lower=$7
 elbo_upper=$8
 output_root=$9
+elbo_mode=${10}
 
-echo "Running config: $config_name; batch_size: ${per_gpu_batch_size}; learning_rate: ${learning_rate}; user_reconstruction_regularization: ${use_reconstruction_regularization}; use_ours: ${use_ours}; rate_weight: ${rate_weight}; elbo_lower: ${elbo_lower}; elbo_upper: ${elbo_upper}; output_root: ${output_root}."
+echo "Running config: $config_name; batch_size: ${per_gpu_batch_size}; learning_rate: ${learning_rate}; user_reconstruction_regularization: ${use_reconstruction_regularization}; use_ours: ${use_ours}; rate_weight: ${rate_weight}; elbo_lower: ${elbo_lower}; elbo_upper: ${elbo_upper}; elbo_mode: ${elbo_mode}; output_root: ${output_root}."
 
 
 # Enable strict error handling to improve script reliability.
@@ -203,7 +204,7 @@ function launch_more_jobs() {
     fi
     log_msg "Launching ${num_jobs_to_launch} jobs..."
  
-    command="sbatch --job-name=${SLURM_JOB_NAME} --output='${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out' exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_ours $rate_weight $elbo_lower $elbo_upper $output_root"
+    command="sbatch --job-name=${SLURM_JOB_NAME} --output='${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out' exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_ours $rate_weight $elbo_lower $elbo_upper $output_root $elbo_mode"
     # command="sbatch --job-name=${SLURM_JOB_NAME} --output='${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out' exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing $use_self_distilliation $output_root"
     echo "$command"
     for ((i = 1; i <= ${num_jobs_to_launch}; i++)); do
@@ -252,7 +253,7 @@ function do_actual_work() {
     # enroot list -f
     # pwd
     enroot start --rw --mount /lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training my_workspace \
-        /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_ours $rate_weight $elbo_lower ${elbo_upper} ${output_root} ${SLURM_JOB_NAME}
+        /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_ours $rate_weight $elbo_lower ${elbo_upper} ${output_root} ${SLURM_JOB_NAME} $elbo_mode
         # /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing $use_self_distilliation ${output_root} ${SLURM_JOB_NAME}
  
     # Simulate a coin toss: generate a random number

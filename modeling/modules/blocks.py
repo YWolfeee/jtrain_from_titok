@@ -463,6 +463,15 @@ class PolicyNet(nn.Module):
                 elbo = vae_results['elbo'] / vae_results['elbo_avg']
 
             mask_rate = 1 - self.elbo.mean * elbo
+            mode = self.elbo.get("elbo_mode", "")
+            if mode == "0.4+0.6":
+                mask_rate = torch.where(mask_rate < 0.5, 0.4, 0.6)
+            elif mode == "upto_px":
+                r = torch.rand_like(mask_rate)
+                mask_rate += (1 - mask_rate) * r
+            elif mode == "downto_px":
+                mask_rate *= torch.rand_like(mask_rate)
+
             mask_rate = mask_rate.clip(self.elbo.get('lower', 0.0), 
                                        self.elbo.get('upper', 1.0))
             return {
