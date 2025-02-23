@@ -1,12 +1,12 @@
-#PBS -N zexp_new_design_test
+#PBS -N zexp_stage1_test
 #PBS -S /bin/bash
 #PBS -l select=1:ncpus=12:mem=90gb:ngpus=2:host=cvml10
 
 config_name='titok_b128_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
-rate_weight=1000
-tag="test_eval_save_policy_info2"
+rate_weight=0
+tag=""test_stage1_after_merging""
 
 nvidia-smi
 cd ~/jtrain_from_titok

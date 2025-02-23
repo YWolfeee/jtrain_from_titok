@@ -930,8 +930,8 @@ def eval_loss(
             current_key = f"{(1 - decode_mask_rates[i]) * 100}%_vs_gt"
 
             reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss_unreduced"])
-            rate_loss = loss_module.rate_weight * (1 - fixed_mask_rate_val) * torch.ones_like(reconstruction_loss)
-            total_loss = reconstruction_loss + rate_loss
+            rate_loss = (1 - fixed_mask_rate_val) * torch.ones_like(reconstruction_loss)
+            total_loss = reconstruction_loss + loss_module.rate_weight * rate_loss
             _add_losses_into_dict(current_key, eval_loss_dict, reconstruction_loss, rate_loss, total_loss)
             
             # Track per-sample losses for finding minimum
