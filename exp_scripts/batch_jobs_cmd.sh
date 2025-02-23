@@ -2,19 +2,23 @@
 
 # List of YAML configuration files (manually specify here)
 config_files=(
+    "titok_s256_4096_12.yaml"
+    "titok_s512_4096_12.yaml"
     # "titok_b128_4096_12.yaml"
     # "titok_b256_4096_12.yaml"
-    "titok_b512_4096_12.yaml"
+    # "titok_b512_4096_12.yaml"
     # "titok_b512_4096_12_no_crop.yaml"
     # "titok_l128_4096_12.yaml"
     # "titok_l256_4096_12.yaml"
+    # "titok_l512_4096_12.yaml"
     # Add or remove YAML files here
 )
 
 # Parameters to iterate over for each YAML file
 settings=(
     "elbo_upper=1.0 elbo_lower=0.0"
-    # "elbo_upper=0.5 elbo_lower=0.5"
+    # "elbo_upper=0.8 elbo_lower=0.0"
+    "elbo_upper=0.5 elbo_lower=0.5"
     # "use_reconstruction_regularization=False use_annealing=False use_self_distilliation=False"
     # "use_reconstruction_regularization=True use_annealing=False use_self_distilliation=False"
     # "use_reconstruction_regularization=True use_annealing=False use_self_distilliation=True"
@@ -42,7 +46,7 @@ for config_file in "${config_files[@]}"; do
         # Evaluate the settings to create variables dynamically
         eval $setting
     # for elbo_mode in "" "0.4+0.6" "upto_px"; do
-    for elbo_mode in "downto_px"; do
+    for elbo_mode in ""; do
         # for elbo_upper in 1.0; do
         #     for elbo_lower in 0.2; do
                 for rate_weight in 1; do    

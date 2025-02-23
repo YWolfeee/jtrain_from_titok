@@ -471,9 +471,15 @@ class PolicyNet(nn.Module):
                 mask_rate += (1 - mask_rate) * r
             elif mode == "downto_px":
                 mask_rate *= torch.rand_like(mask_rate)
-
+            elif mode == "0.1_in_px":
+                r = (torch.rand_like(mask_rate) - 0.5) / 0.5 * 0.1
+                mask_rate += r
+            elif mode == "0.1_in_0.5":
+                mask_rate = (torch.rand_like(mask_rate) - 0.5) / 5 + 0.5
+                
             mask_rate = mask_rate.clip(self.elbo.get('lower', 0.0), 
                                        self.elbo.get('upper', 1.0))
+            
             return {
                 "sampled_mask_rate": mask_rate,
                 "mask_rate_value": mask_rate,
