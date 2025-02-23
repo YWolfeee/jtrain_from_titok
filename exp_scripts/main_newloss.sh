@@ -17,6 +17,7 @@ elbo_lower=$7
 elbo_upper=$8
 output_root=$9
 job_name=${10}         # Use as output dir
+elbo_mode=${11}
 
 ngpus=8
 
@@ -77,6 +78,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
+    model.reconstruction_regularization.policy.elbo.elbo_mode=${elbo_mode} \
     model.reconstruction_regularization.policy.elbo.mean=0.5 \
     model.reconstruction_regularization.policy.elbo.lower=${elbo_lower} \
     model.reconstruction_regularization.policy.elbo.upper=${elbo_upper} \
@@ -84,7 +86,7 @@ accelerate launch \
     training.per_gpu_batch_size=${per_gpu_batch_size} \
     optimizer.params.learning_rate=${lr} \
     training.max_train_steps=250_000 \
-    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000320}.tar' \
+    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
     
 

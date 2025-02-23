@@ -55,6 +55,7 @@ vae = VAE(H)
 state_dict = torch.load('imagenet64-iter-1600000-model.th', map_location='cpu')
 new_state_dict = {}
 l = len('module.')
+print("model loaded")
 for k in state_dict:
     if k.startswith('module.'):
         new_state_dict[k[l:]] = state_dict[k]
@@ -62,12 +63,15 @@ for k in state_dict:
         new_state_dict[k] = state_dict[k]
 state_dict = new_state_dict
 vae.load_state_dict(state_dict)
+vae = vae.cuda()
+
+print("model on gpu.")
 
 # Create temp_results directory if it doesn't exist
-os.makedirs('temp_results', exist_ok=True)
+# os.makedirs('temp_results', exist_ok=True)
 
 # Create figure with 8 subplots in one row
-plt.figure(figsize=(32, 4))
+# plt.figure(figsize=(32, 4))
 
 for i in range(8):
     img = Image.open(f'vdvae/test_imgs/test{i}.png').convert('RGB')
@@ -84,20 +88,23 @@ for i in range(8):
     print(inp.min(), inp.max())
     print(out.min(), out.max())
     # inp, out shape: (1, 64, 64, 3); mean = 0, std = 1
-    vae = vae.cuda()
-    stats = vae.forward(inp, out)
 
-    for key in stats:
-        stats[key] = stats[key].item()
+    for seed in range(4):
+        stats = vae.forward(inp, out)
+
+        for key in stats:
+            stats[key] = stats[key].item()
+
+        print(i, seed, stats)
 
     # Plot in the corresponding subplot position
-    plt.subplot(1, 8, i+1)
-    plt.imshow(img[0].cpu().numpy().astype(np.uint8))
+    # plt.subplot(1, 8, i+1)
+    # plt.imshow(img[0].cpu().numpy().astype(np.uint8))
     
-    # Add stats text above the image
-    stats_text = '\n'.join([f'{k}: {v:.2f}' for k,v in stats.items()])
-    plt.title(stats_text)
+    # # Add stats text above the image
+    # stats_text = '\n'.join([f'{k}: {v:.2f}' for k,v in stats.items()])
+    # plt.title(stats_text)
 
 # Save the complete figure with all images
-plt.savefig('temp_results/all_tests_with_stats.png')
-plt.close()
+# plt.savefig('temp_results/all_tests_with_stats.png')
+# plt.close()

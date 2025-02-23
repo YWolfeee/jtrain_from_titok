@@ -564,31 +564,33 @@ def train_one_epoch(config, logger, accelerator,
 
             if (global_step + 1) % config.experiment.eval_loss_every == 0 or global_step == 0:
                 logger.info(f"Global step: {global_step + 1}")
-                eval_loss_dict, recon_matrix, policy_recon_arr, policy_rate_arr = eval_loss(
-                    model,
-                    train_dataloader,
-                    accelerator,
-                    loss_module,
-                    pretrained_tokenizer=pretrained_tokenizer
-                )
-                logger.info(pprint.pformat(eval_loss_dict))
-                eval_loss_log = {'eval_loss/'+k: v for k, v in eval_loss_dict.items()}
-                accelerator.log(eval_loss_log, step=global_step + 1)
-                import numpy as np
-                # save reconstruction error of manually set mask rate
-                recon_matrix = recon_matrix.cpu().numpy()
-                root = Path(config.experiment.output_dir) / "recon_matrix"
-                os.makedirs(root, exist_ok=True)
-                np.save(os.path.join(root, f"recon_matrix-{global_step}.npy"), recon_matrix)
-                # save from policy
-                policy_recon_arr = policy_recon_arr.cpu().numpy() # reconstruction loss
-                root = Path(config.experiment.output_dir) / "policy_recon_arr"
-                os.makedirs(root, exist_ok=True)
-                np.save(os.path.join(root, f"policy_recon_arr-{global_step}.npy"), policy_recon_arr)
-                policy_rate_arr = policy_rate_arr.cpu().numpy() # rate loss
-                root = Path(config.experiment.output_dir) / "policy_rate_arr"
-                os.makedirs(root, exist_ok=True)
-                np.save(os.path.join(root, f"policy_rate_arr-{global_step}.npy"), policy_rate_arr)
+                for mode in ['train', 'eval']:
+                    dataloader = train_dataloader if mode == 'train' else eval_dataloader
+                    eval_loss_dict, recon_matrix, policy_recon_arr, policy_rate_arr = eval_loss(
+                        model,
+                        dataloader,
+                        accelerator,
+                        loss_module,
+                        pretrained_tokenizer=pretrained_tokenizer
+                    )
+                    # logger.info(pprint.pformat(eval_loss_dict))
+                    eval_loss_log = {f'{mode}_loss/'+k: v for k, v in eval_loss_dict.items()}
+                    accelerator.log(eval_loss_log, step=global_step + 1)
+                    import numpy as np
+                    # save reconstruction error of manually set mask rate
+                    recon_matrix = recon_matrix.cpu().numpy()
+                    root = Path(config.experiment.output_dir) / "recon_matrix"
+                    os.makedirs(root, exist_ok=True)
+                    np.save(os.path.join(root, f"recon_matrix-{global_step}-{mode}.npy"), recon_matrix)
+                    # save from policy
+                    policy_recon_arr = policy_recon_arr.cpu().numpy() # reconstruction loss
+                    root = Path(config.experiment.output_dir) / "policy_recon_arr"
+                    os.makedirs(root, exist_ok=True)
+                    np.save(os.path.join(root, f"policy_recon_arr-{global_step}-{mode}.npy"), policy_recon_arr)
+                    policy_rate_arr = policy_rate_arr.cpu().numpy() # rate loss
+                    root = Path(config.experiment.output_dir) / "policy_rate_arr"
+                    os.makedirs(root, exist_ok=True)
+                    np.save(os.path.join(root, f"policy_rate_arr-{global_step}-{mode}.npy"), policy_rate_arr)
 
             # Evaluate reconstruction.
             if eval_dataloader is not None and (global_step + 1) % config.experiment.eval_every == 0:
@@ -876,7 +878,7 @@ def eval_loss(
     pretrained_tokenizer=None,
     sampled_batches=4
 ):
-    decode_mask_rates = [i / 8 for i in range(8)]
+    decode_mask_rates = [i / 20 for i in range(20)]
     local_model = accelerator.unwrap_model(model)
     local_model.eval()
     eval_loss_dict = {}
@@ -994,7 +996,7 @@ def eval_loss(
     policy_recon_error_arr = torch.concat(policy_recon_error_arr, dim = 0)
     policy_rate_arr = torch.concat(policy_rate_arr, dim = 0)
 
-    print(images.mean(), images.median())
+    # print(images.mean(), images.median())
     model.train()
     return eval_loss_dict, recon_error_matrix, policy_recon_error_arr, policy_rate_arr
 

@@ -117,7 +117,7 @@ def make_viz_from_samples(
         reconstructed_images = reconstructed_images.cpu()
         start_x = (i + 1) * img_width
         end_x = start_x + img_width
-        print("\033[91mCHECK reconstructed_images", reconstructed_images.shape, "\033[0m")
+        # print("\033[91mCHECK reconstructed_images", reconstructed_images.shape, "\033[0m")
         annotated_images[:, :, annotation_height:img_height+annotation_height, start_x:end_x] = reconstructed_images
 
     # Second row: original and diff images

@@ -5,7 +5,7 @@
 #SBATCH --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training
 #SBATCH --container-image=/lustre/fsw/portfolios/dir/users/haotiany/docker_images/imaginaire4_v9.2.2.sqsh
 #SBATCH --gpus-per-node=8
-#SBATCH --nodes=4
+#SBATCH --nodes=1
 #SBATCH --time=4:00:00
 
 # nvidia-smi
@@ -13,15 +13,15 @@ cd /joint_training/jtrain_from_titok
 pwd
 source ~/.bashrc
 
-config_name="titok_b256_4096_12"
+config_name="titok_b512_4096_12"
 model_type="transformer"
-tag="test_multi_node"
-ngpus=32
+tag="understand_px-9w"
+ngpus=8
 export PYTHONPATH=$(pwd)
 
 # python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
 accelerate launch \
-    --num_machines=4 --num_processes=${ngpus} --machine_rank=$SLURM_NODEID \
+    --num_machines=1 --num_processes=${ngpus} --machine_rank=$SLURM_NODEID \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
@@ -37,7 +37,7 @@ accelerate launch \
     model.reconstruction_regularization.annealing.time_end=0.1 \
     model.reconstruction_regularization.annealing.is_increasing=False \
     \
-    model.reconstruction_regularization.use_policy=False \
+    model.reconstruction_regularization.use_policy=True \
     model.reconstruction_regularization.policy.model_type=${model_type} \
     model.reconstruction_regularization.policy.num_heads=4 \
     model.reconstruction_regularization.policy.hidden_size=128 \
@@ -63,16 +63,17 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
+    model.reconstruction_regularization.policy.elbo.elbo_mode="" \
     model.reconstruction_regularization.policy.elbo.mean=0.5 \
-    model.reconstruction_regularization.policy.elbo.lower=0.2 \
+    model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
     training.per_gpu_batch_size=64 \
     optimizer.params.learning_rate=4e-4 \
     training.max_train_steps=250_000 \
-    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000320}.tar' \
+    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
-    
-    # experiment.init_weight="results_try_new_design/gaussian+rate_weight=1+policy_network=transformer+anneal_policy+alpha_start=2/checkpoint-30000/unwrapped_model/pytorch_model.bin"
+    experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
+    # experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=0.4+0.6+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
 
     # \
     # dataset.params.train_shards_path_or_url='small_datasets/imagenet-train-000000.tar' \
