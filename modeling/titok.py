@@ -454,16 +454,28 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # decoded.shape: [batch_size, 1024, H, W]
         return decoded
     
+    def encode_tokens(self, images):
+        encode_dict = self.encode(images)[1]
+        full_tokens = encode_dict["min_encoding_indices"].reshape(images.shape[0], -1)
+        mask_rate = encode_dict["sampled_mask_rate"].reshape(images.shape[0], -1)
+        return full_tokens, mask_rate
+    
     def decode_tokens(self, tokens, decode_mask_rate=0.0):
         if self.quantize_mode == "vq":
             tokens = tokens.squeeze(1)
-            batch, seq_len = tokens.shape # B x N
+            batch, seq_len = tokens.shape # B x N1
+            # padding after tokens such that dim=1 is self.num_latent_tokens
+            if seq_len < self.num_latent_tokens:
+                # no specific meanning of id=0, since it will later be ignored by the attention mask
+                padding = torch.zeros(batch, self.num_latent_tokens - seq_len, device=tokens.device, dtype=tokens.dtype)
+                tokens = torch.cat([tokens, padding], dim=1)
             z_quantized = self.quantize.get_codebook_entry(
                 tokens.reshape(-1)).reshape(batch, 1, seq_len, -1)
             z_quantized = rearrange(z_quantized, 'b h w c -> b c h w').contiguous()
         elif self.quantize_mode == "vae":
             z_quantized = tokens
-        decode_mask_rate = self.get_mask_rate(z_quantized, decode_mask_rate)
+            raise ValueError("Unsupported type")
+        decode_mask_rate = 1 - seq_len / self.num_latent_tokens
         decoded = self.decode(z_quantized, decode_mask_rate=decode_mask_rate)
         return decoded
     
@@ -512,3 +524,5 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         decoded = self.decode(z_quantized, decode_mask_rate=forward_mask_rate)
 
         return decoded, result_dict
+    
+

@@ -84,7 +84,7 @@ def main():
         hf_hub_download(repo_id="yucornetto/RAR", filename=f"{config.dataset.params.pretokenization}", local_dir="./")
     accelerator.wait_for_everyone()
 
-    # get maskgit-vq tokenizer
+    # get tokenizer for maskgit-vq / titok / ours
     tokenizer = create_pretrained_tokenizer(config)
     tokenizer.to(accelerator.device)
 

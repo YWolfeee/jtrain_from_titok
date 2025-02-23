@@ -228,7 +228,7 @@ class ReconstructionLoss_Stage2(torch.nn.Module):
         if mode == "generator":
             return self._forward_generator(inputs, reconstructions, extra_result_dict, global_step)
         elif mode == "discriminator":
-            return self._forward_discriminator(inputs, reconstructions, global_step)
+            return self._forward_discriminator(inputs, reconstructions, extra_result_dict, global_step)
         else:
             raise ValueError(f"Unsupported mode {mode}")
    
@@ -302,6 +302,7 @@ class ReconstructionLoss_Stage2(torch.nn.Module):
     def _forward_discriminator(self,
                                inputs: torch.Tensor,
                                reconstructions: torch.Tensor,
+                               extra_result_dict: Mapping[Text, torch.Tensor],
                                global_step: int,
                                ) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
         """Discrminator training step."""
@@ -366,14 +367,17 @@ class ARLoss(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.target_vocab_size = config.model.vq_model.codebook_size
-        self.criterion = torch.nn.CrossEntropyLoss(reduction="mean")
+        self.criterion = torch.nn.CrossEntropyLoss(reduction="none")
     
-    def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
-        shift_logits = logits[..., :-1, :].permute(0, 2, 1).contiguous() # NLC->NCL
+    def forward(self, logits: torch.Tensor, labels: torch.Tensor, loss_weight_mask: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
+        # Target of last token is meaningless, match next token
+        shift_logits = logits[..., :-1, :].permute(0, 2, 1).contiguous() # (B, [cond]+S+[eos], codebook_size) -> (B, codebook_size, [cond]+S)
         shift_labels = labels.contiguous()
         shift_logits = shift_logits.view(shift_logits.shape[0], self.target_vocab_size, -1)
         shift_labels = shift_labels.view(shift_labels.shape[0], -1)
         shift_labels = shift_labels.to(shift_logits.device)
-        loss = self.criterion(shift_logits, shift_labels)
+        loss = self.criterion(shift_logits, shift_labels) # (B, codebook_size, [cond]+S)
+        loss = torch.mean(loss, dim=-2) # (B, [cond]+S)
+        loss = loss * loss_weight_mask # ignore the irrelevant padding tokens
         correct_tokens = (torch.argmax(shift_logits, dim=1) == shift_labels).sum(dim=1) / shift_labels.size(1)
         return loss, {"loss": loss, "correct_tokens": correct_tokens.mean()}

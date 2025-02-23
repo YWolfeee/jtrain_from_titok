@@ -242,6 +242,7 @@ class RAR(BaseModel):
         self.target_codebook_size = target_codebook_size
         self.none_condition_id = self.condition_num_classes + self.target_codebook_size + 1
         self.eos_id = self.condition_num_classes + self.target_codebook_size + 2
+        self.pad_id = self.condition_num_classes + self.target_codebook_size + 3
         
         self.apply(init_weights)
 
@@ -270,14 +271,19 @@ class RAR(BaseModel):
             block.attn.kv_cache = False
             block.attn.reset_kv_cache()
 
-    def sample_orders(self, x):
+    def sample_orders(self, x, mask_rate=None):
         batch_size = x.shape[0]
         shuffled_orders = []
+        if mask_rate is None:
+            mask_rate = torch.zeros(batch_size, device=x.device, dtype=x.dtype)
 
-        for _ in range(batch_size):
+        for i in range(batch_size):
+            kept_tokens = int((1 - mask_rate[i]) * self.image_seq_len)
             if random.random() < self.random_ratio:
-                # random order
-                shuffled_orders.append(torch.randperm(self.image_seq_len, device=x.device))
+                # random order for kept tokens, rest in order
+                perm = torch.randperm(kept_tokens, device=x.device)
+                rest = torch.arange(kept_tokens, self.image_seq_len, device=x.device)
+                shuffled_orders.append(torch.cat([perm, rest]))
             else:
                 # raster order
                 shuffled_orders.append(torch.arange(self.image_seq_len, device=x.device))
@@ -320,54 +326,70 @@ class RAR(BaseModel):
         condition[drop_label_mask] = self.none_condition_id
         return condition
     
-    def prepare_eos(self, batch_size):
-        batch_eos = self.eos_id.unsqueeze(0).expand(batch_size, 1)
-        return batch_eos
+    def preprocess_input_ids(self, input_ids, mask_rate):
+        # E.g., input_ids: [[51, 12, 64, 21], [6, 195, 87, 40]]; mask_rate: [0.0, 0.25]
+        # Postpend a placeholder token for handling 0.0 mask_rate
+        batch_size = input_ids.shape[0]
+        # input_ids: [[51, 12, 64, 21, 2027], [6, 195, 87, 40, 2027]], 2027 -> pad_id
+        input_ids = torch.cat([input_ids, torch.full((batch_size, 1), self.pad_id, device=input_ids.device)])
+        kept_tokens_len = ((1 - mask_rate) * self.image_seq_len).long() # (B,)
+        
+        # Create position indices for comparison
+        positions = torch.arange(self.image_seq_len, device=input_ids.device)
+        positions = positions.unsqueeze(0).expand(batch_size, -1)  # [B, seq_len + 1]
+        kept_tokens_len = kept_tokens_len.unsqueeze(1)  # [B, 1]
+
+        # Use torch.where to replace tokens
+        input_ids = torch.where(positions == kept_tokens_len, self.eos_id, input_ids)
+        input_ids = torch.where(positions > kept_tokens_len, self.pad_id, input_ids)
+        loss_weight_mask = torch.where(positions <= kept_tokens_len, 1, 0) # [B, S+1]
+
+        # E.g., input_ids: [[51, 12, 64, 21, 2026], [6, 195, 87, 2026, 2027]] # 2026 -> eos_id
+        return input_ids, loss_weight_mask
 
     def get_none_condition(self,
                            condition
                            ):
         return torch.full_like(condition, self.none_condition_id)
     
-    def forward(self, input_ids, condition, return_labels=False):
+    def forward(self, input_ids, condition, mask_rate=None,return_labels=False):
         assert self.modelling in ["rar", "ar"]
-        orders = self.sample_orders(input_ids) if self.modelling == "rar" else None
+        orders = self.sample_orders(input_ids, mask_rate=mask_rate) if self.modelling == "rar" else None
         return self.forward_fn(input_ids, condition, return_labels, orders)
 
     def forward_fn(self, input_ids, condition,
                    return_labels=False,
                    orders=None,
-                   use_eos=False,
-                   is_sampling=False):
+                   is_sampling=False,
+                   adaptive_len=False,
+                   mask_rate=None):
         # Token ID Correspondance:
         #  [0, codebook_size - 1]                       : those are the learned quantized image tokens
         #  codebook_size                                : the mask token used to mask image tokens
         #  [codebook_size + 1, codebook_size + nclass]  : the imagenet class tokens
         #  codebook_size + 1 + nclass                   : the class drop label
         #  codebook_size + 1 + nclass + 1               : the EoS token for adaptive tokenizer
-        
-        # Prepare EOS
-        eos_ids = self.prepare_eos(condition.shape[0])
+        #  codebook_size + 1 + nclass + 1 + 1           : the Padding token for adaptive tokenizer
 
         if orders is None:
             # We can simply convert RAR to AR by setting orders as None before forwarding
             orders = self.get_raster_orders(input_ids)
 
+        loss_weight_mask = torch.ones_like(input_ids)
+        if adaptive_len:
+            # Here we preprocess input_ids to handling various length
+            # E.g. token sequence [77, 49, 53, 69] w/ mask_rate=0.25 -> [77, 49, 53, 2026, 2027], 2026 - eos; 2027 - pad
+            input_ids, loss_weight_mask = self.preprocess_input_ids(input_ids, mask_rate)
+        
         # Input_ids are in [B,S], input_ids[i] means ith image represented by token sequence; S is the number of tokens representing image
         labels = input_ids.clone() 
-        if not use_eos:
-            # prepend condition token, [B,S] -> [B,S+1], e.g. class id 412, with token sequence [77, 49, 53, 69] -> [412+1025, 77, 49, 53, 69]
-            input_ids = torch.cat([condition.view(condition.shape[0], -1),
-                                input_ids.view(input_ids.shape[0], -1),
-                                ], dim=1)
-        else:
-            # Here we append eos to each sequencce [B,S] -> [B,1+S+1]
-            # E.g. class id 412, with token sequence [77, 49, 53, 69] -> [1024+1+412, 77, 49, 53, 69, 1024+1+1000+1]
-            input_ids = torch.cat([condition.view(condition.shape[0], -1),
-                                input_ids.view(input_ids.shape[0], -1),
-                                eos_ids.view(eos_ids.shape[0], -1)], dim=1)
+        # prepend condition token, [B,S] -> [B,1+S], e.g. class id 412, with token sequence [77, 49, 53, 69] -> [412+1025, 77, 49, 53, 69];
+        # If adaptive, [B+S] -> [B, 1+S+1], e.g., [412+1025, 77, 49, 53, 2026, 2027], 2026 - eos; 2027 - pad
+        input_ids = torch.cat([condition.view(condition.shape[0], -1),
+                            input_ids.view(input_ids.shape[0], -1),
+                            ], dim=1)
         
-        # mapping token ids into [B,S+1/S+2,embed_dim], here embed_dim is 768 in default settings
+        # mapping token ids into [B,S+1,embed_dim] or [B, S+2, embed_dim], here embed_dim is 768 in default settings
         embeddings = self.embeddings(input_ids)
         condition_token = embeddings[:, 0]
 
@@ -388,7 +410,7 @@ class RAR(BaseModel):
             # shuffle labels
             labels = self.shuffle(labels, orders)
             # randomized permutation: during training, we need to shuffle the input_ids's order but not for sampling, but do not shuffle EoS
-            if not use_eos:
+            if not adaptive_len:
                 embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:], orders)], dim=1)
             else:
                 embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:-1], orders), embeddings[:, -1:]], dim=1)
@@ -403,12 +425,13 @@ class RAR(BaseModel):
         x = x + torch.cat([pos_embed_prefix, pos_embed_postfix], dim=1)[:, :x.shape[1]]
 
         # add target-aware pos embed
-        if not use_eos:
+        if not adaptive_len:
+            # the last permuted token not requiring target as well
             target_aware_pos_embed = torch.cat(
                 [torch.zeros_like(x[:, :prefix-1]), target_aware_pos_embed_postfix, torch.zeros_like(x[:, -1:])], dim=1
             )
         else:
-            # the last permuted tokens / the eos token not requiring target
+            # the last permuted tokens / the additional token not requiring target
             target_aware_pos_embed = torch.cat(
                 [torch.zeros_like(x[:, :prefix-1]), target_aware_pos_embed_postfix, torch.zeros_like(x[:, -2:])], dim=1
             )
@@ -437,15 +460,17 @@ class RAR(BaseModel):
 
         if not self.blocks[0].attn.kv_cache:
             # remove cls token
-            x = x[:, prefix - 1:]
+            x = x[:, prefix - 1:] # [B, 1+1+S+1, emb_dim] -> [B, 1+S+1, embed_dim]
             condition_token = condition_token[:, prefix - 1:]
 
 
         x = self.adaln_before_head(x, condition_token)
         x = self.lm_head(x)
 
+        # x: (B, 1+S+1, codebook_size); label: (B, S+1); loss_weight_mask: (B, S+1)
+        loss_weight_mask = loss_weight_mask.to(x.dtype, x.device)
         if return_labels:
-            return x, labels
+            return x, labels, loss_weight_mask
         return x
     
     @torch.no_grad()

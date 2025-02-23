@@ -6,7 +6,7 @@ config_name='titok_b128_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
 rate_weight=0
-tag=""test_stage1_after_merging""
+tag="test_stage1_after_merging_again"
 
 nvidia-smi
 cd ~/jtrain_from_titok

@@ -1,12 +1,12 @@
 #PBS -N zexp_stage2_test
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=6:mem=45gb:ngpus=1:host=cvml11
+#PBS -l select=1:ncpus=12:mem=90gb:ngpus=2:host=cvml11
 
-config_name='titok_b128_4096_12'
+config_name='titok_b512_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
 rate_weight=0
-tag="test_stage2_after_merging"
+tag="test_stage2_with_proper_checkpoint_again"
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -24,7 +24,7 @@ accelerate launch \
     experiment.project="TEMP_QY" \
     experiment.name="${config_name}_${tag}" \
     experiment.output_dir="temp/${tag}" \
-    experiment.init_weight="temp/test_eval_save_policy_info/checkpoint-20000/ema_model/pytorch_model.bin" \
+    experiment.init_weight="temp/stage1_checkpoint.bin" \
     \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
@@ -65,7 +65,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.elbo.mean=0.5 \
     model.reconstruction_regularization.policy.elbo.lower=0.2 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
-    training.per_gpu_batch_size=32 \
+    training.per_gpu_batch_size=16 \
     optimizer.params.learning_rate=1e-4 \
     training.max_train_steps=250_000 \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \

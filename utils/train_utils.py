@@ -74,14 +74,26 @@ class AverageMeter(object):
 
 
 def create_pretrained_tokenizer(config, accelerator=None):
-    if config.model.vq_model.finetune_decoder:
-        # No need of pretrained tokenizer at stage2
-        pretrianed_tokenizer = None
-    else:
-        pretrianed_tokenizer = PretrainedTokenizer(config.model.vq_model.pretrained_tokenizer_weight)
+    try:
+        pretrained_tokenizer_name = config.model.vq_model.pretrained_tokenizer_name
+    except:
+        pretrained_tokenizer_name = "maskgit-vq"
+
+    if pretrained_tokenizer_name == "maskgit-vq":
+        if config.model.vq_model.finetune_decoder:
+            # No need of pretrained tokenizer at stage2
+            pretrained_tokenizer = None
+        else:
+            pretrained_tokenizer = PretrainedTokenizer(config.model.vq_model.pretrained_tokenizer_weight)
+            if accelerator is not None:
+                pretrained_tokenizer.to(accelerator.device)
+    elif pretrained_tokenizer_name in ["titok", "ours"]:
+        pretrained_tokenizer = TiTok.from_pretrained(config.model.vq_model.pretrained_tokenizer_weight, config=config)
         if accelerator is not None:
-            pretrianed_tokenizer.to(accelerator.device)
-    return pretrianed_tokenizer
+            pretrained_tokenizer.to(accelerator.device)
+    else:
+        raise ValueError("Unsupported type of pretrained_tokenizer")
+    return pretrained_tokenizer
 
 
 def create_model_and_loss_module(config, logger, accelerator,
@@ -725,7 +737,14 @@ def train_one_epoch_generator(
                 # Encode images on the flight.
                 with torch.no_grad():
                     tokenizer.eval()
-                    input_tokens = tokenizer.encode(images)[1]["min_encoding_indices"].reshape(images.shape[0], -1)
+                    try:
+                        use_regularization = tokenizer.use_regularization
+                    except:
+                        use_regularization = False
+                    if not use_regularization:
+                        input_tokens = tokenizer.encode(images)[1]["min_encoding_indices"].reshape(images.shape[0], -1)
+                    else:
+                        input_tokens = tokenizer.encode(images)[1]["min_encoding_indices"].reshape(images.shape[0], -1)
             else:
                 raise ValueError(f"Not found valid keys: {batch.keys()}")
 
@@ -754,8 +773,8 @@ def train_one_epoch_generator(
                 condition = unwrap_model.preprocess_condition(
                     conditions, cond_drop_prob=config.model.generator.class_label_dropout
                 )
-                logits, labels = model(input_tokens, condition, return_labels=True)
-                loss, loss_dict = loss_module(logits, labels)
+                logits, labels, loss_weight_mask = model(input_tokens, condition, return_labels=True)
+                loss, loss_dict = loss_module(logits, labels, loss_weight_mask)
             # Gather the losses across all processes for logging.
             gen_logs = {}
             for k, v in loss_dict.items():
@@ -918,6 +937,7 @@ def eval_loss(
                     0, # ignore effect of global_step in this step
                     mode="generator",
                 )
+                unwrapped_loss_module = loss_module.module
             else:
                 _, loss_dict = loss_module(
                     proxy_codes,
@@ -925,13 +945,14 @@ def eval_loss(
                     extra_results_dict,
                     mode="with_ground_truth"
                 )
+                unwrapped_loss_module = loss_module
             
             # Store original metrics
             current_key = f"{(1 - decode_mask_rates[i]) * 100}%_vs_gt"
 
             reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss_unreduced"])
             rate_loss = (1 - fixed_mask_rate_val) * torch.ones_like(reconstruction_loss)
-            total_loss = reconstruction_loss + loss_module.rate_weight * rate_loss
+            total_loss = reconstruction_loss + unwrapped_loss_module.rate_weight * rate_loss
             _add_losses_into_dict(current_key, eval_loss_dict, reconstruction_loss, rate_loss, total_loss)
             
             # Track per-sample losses for finding minimum
@@ -962,6 +983,7 @@ def eval_loss(
                     0, # ignore effect of global_step in this step
                     mode="generator",
                 )
+                unwrapped_loss_module = loss_module.module
             else:
                 _, loss_dict = loss_module(
                     proxy_codes,
@@ -969,10 +991,11 @@ def eval_loss(
                     extra_results_dict,
                     mode="with_policy_eval"
                 )
+                unwrapped_loss_module = loss_module
             
             policy_reconstruction_loss = accelerator.gather(loss_dict["reconstruction_loss_unreduced"])
             policy_rate_loss = accelerator.gather(loss_dict["rate_loss_unreduced"])
-            policy_total_loss = policy_reconstruction_loss + loss_module.rate_weight * policy_rate_loss
+            policy_total_loss = policy_reconstruction_loss + unwrapped_loss_module.rate_weight * policy_rate_loss
             _add_losses_into_dict("policy", eval_loss_dict, policy_reconstruction_loss, policy_rate_loss, policy_total_loss)
 
             # Save policy related info
