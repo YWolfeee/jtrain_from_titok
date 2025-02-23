@@ -104,39 +104,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.latent_tokens = nn.Parameter(
             scale * torch.randn(self.num_latent_tokens, self.encoder.width))
         
-        if self.finetune_decoder:
-            # Freeze encoder/quantizer/latent tokens
-            self.latent_tokens.requires_grad_(False)
-            self.encoder.eval()
-            self.encoder.requires_grad_(False)
-            self.quantize.eval()
-            self.quantize.requires_grad_(False)
-            if self.use_policy:
-                self.policy_net.eval()
-                self.policy_net.requires_grad_(False)
-
-            # Include MaskGiT-VQGAN's quantizer and decoder
-            self.pixel_quantize = Pixel_Quantizer(
-                num_embeddings=1024, embedding_dim=256, commitment_cost=0.25)
-            self.pixel_decoder = Pixel_Decoder(OmegaConf.create(
-                {"channel_mult": [1, 1, 2, 2, 4],
-                "num_resolutions": 5,
-                "dropout": 0.0,
-                "hidden_channels": 128,
-                "num_channels": 3,
-                "num_res_blocks": 2,
-                "resolution": 256,
-                "z_channels": 256}))
         
-        if self.freeze_decoder:
-            self.decoder.eval()
-            self.decoder.requires_grad_(False)
-        if self.freeze_encoder:
-            self.latent_tokens.requires_grad_(False)
-            self.encoder.eval()
-            self.encoder.requires_grad_(False)
-            self.quantize.eval()
-            self.quantize.requires_grad_(False)
             
         # QY: Add regularization for using partial tokens for reconstruction
         if config.model.use_reconstruction_regularization:
@@ -225,6 +193,40 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.feature_extractor = AutoModel.from_pretrained(self.feature_extractor_name)
         self.feature_extractor.eval()
         self.feature_extractor.requires_grad_(False) # OUTPUT SHAPE: [B, 257, 768] for base, [B, 257, 1024] for large
+
+        if self.finetune_decoder:
+            # Freeze encoder/quantizer/latent tokens
+            self.latent_tokens.requires_grad_(False)
+            self.encoder.eval()
+            self.encoder.requires_grad_(False)
+            self.quantize.eval()
+            self.quantize.requires_grad_(False)
+            if self.use_policy:
+                self.policy_net.eval()
+                self.policy_net.requires_grad_(False)
+
+            # Include MaskGiT-VQGAN's quantizer and decoder
+            self.pixel_quantize = Pixel_Quantizer(
+                num_embeddings=1024, embedding_dim=256, commitment_cost=0.25)
+            self.pixel_decoder = Pixel_Decoder(OmegaConf.create(
+                {"channel_mult": [1, 1, 2, 2, 4],
+                "num_resolutions": 5,
+                "dropout": 0.0,
+                "hidden_channels": 128,
+                "num_channels": 3,
+                "num_res_blocks": 2,
+                "resolution": 256,
+                "z_channels": 256}))
+        
+        if self.freeze_decoder:
+            self.decoder.eval()
+            self.decoder.requires_grad_(False)
+        if self.freeze_encoder:
+            self.latent_tokens.requires_grad_(False)
+            self.encoder.eval()
+            self.encoder.requires_grad_(False)
+            self.quantize.eval()
+            self.quantize.requires_grad_(False)
         
     def _save_pretrained(self, save_directory: Path) -> None:
         """Save weights and config to a local directory."""

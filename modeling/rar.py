@@ -195,6 +195,12 @@ class RAR(BaseModel):
         intermediate_size = config.model.generator.intermediate_size
         mlp_ratio = intermediate_size / embed_dim
 
+        # traning mode
+        try:
+            self.modelling = config.model.generator.modelling
+        except:
+            self.modelling = "ar"
+
         image_seq_len = config.model.generator.image_seq_len
         target_codebook_size = config.model.vq_model.codebook_size
         condition_num_classes = config.model.generator.condition_num_classes
@@ -235,11 +241,12 @@ class RAR(BaseModel):
         self.image_seq_len = image_seq_len
         self.target_codebook_size = target_codebook_size
         self.none_condition_id = self.condition_num_classes + self.target_codebook_size + 1
+        self.eos_id = self.condition_num_classes + self.target_codebook_size + 2
         
         self.apply(init_weights)
 
-        attn_mask = build_causal_mask(self.image_seq_len + 1024) # include condition
-        self.register_buffer('attn_mask', attn_mask, persistent=False)
+        attn_mask = build_causal_mask(self.image_seq_len + 1024) # Guess 1024 here for safety?
+        self.register_buffer('attn_mask', attn_mask, persistent=False) # enable self.attn
 
         self.use_checkpoint = config.model.generator.get("use_checkpoint", False)
 
@@ -301,11 +308,21 @@ class RAR(BaseModel):
         return unshuffled_x
 
     def preprocess_condition(self, condition, cond_drop_prob=0.0):
-        # Set class condition to None condition
+        # condition: batch of class ids in shape of [B,], e.g. [54, 521, 69, 378];
+        # To enable classifier-free guidance, create a mask that randomly drop class id;
+        # E.g., if the generated mask is [0, 1, 0, 0], the second class will be replaced later.
         drop_label_mask = torch.rand_like(condition, dtype=torch.float) < cond_drop_prob
-        condition = condition + self.target_codebook_size + 1  # [0, 999] -> [codebook_size + 1, codebook_size + 999]
+        # Shift the class token id to leave sapce for learned quantized tokens;
+        # E.g. with 1024 ids serving for learned quantized tokens, [54, 521, 69, 378] -> [1079, 1546, 1094, 1403].
+        condition = condition + self.target_codebook_size + 1  # [0, 999] -> [codebook_size + 1, codebook_size + 999], here additional 1 for mask token
+        # Using the generated mask to replace corresponding class id;
+        # E.g. [1079, 2025, 1094, 1403], 2025 obtained by 1000 + 1024 + 1
         condition[drop_label_mask] = self.none_condition_id
         return condition
+    
+    def prepare_eos(self, batch_size):
+        batch_eos = self.eos_id.unsqueeze(0).expand(batch_size, 1)
+        return batch_eos
 
     def get_none_condition(self,
                            condition
@@ -313,34 +330,51 @@ class RAR(BaseModel):
         return torch.full_like(condition, self.none_condition_id)
     
     def forward(self, input_ids, condition, return_labels=False):
-        orders = self.sample_orders(input_ids)
+        assert self.modelling in ["rar", "ar"]
+        orders = self.sample_orders(input_ids) if self.modelling == "rar" else None
         return self.forward_fn(input_ids, condition, return_labels, orders)
 
     def forward_fn(self, input_ids, condition,
                    return_labels=False,
                    orders=None,
+                   use_eos=False,
                    is_sampling=False):
-        # TODO: optimize the inference time where the computation of pos_embed etc can be shared across sampling steps.
-        # Token space:
+        # Token ID Correspondance:
         #  [0, codebook_size - 1]                       : those are the learned quantized image tokens
         #  codebook_size                                : the mask token used to mask image tokens
         #  [codebook_size + 1, codebook_size + nclass]  : the imagenet class tokens
         #  codebook_size + 1 + nclass                   : the class drop label
+        #  codebook_size + 1 + nclass + 1               : the EoS token for adaptive tokenizer
+        
+        # Prepare EOS
+        eos_ids = self.prepare_eos(condition.shape[0])
 
         if orders is None:
+            # We can simply convert RAR to AR by setting orders as None before forwarding
             orders = self.get_raster_orders(input_ids)
 
-        labels = input_ids.clone()
-        # prepend condition token
-        input_ids = torch.cat([condition.view(condition.shape[0], -1),
-                               input_ids.view(input_ids.shape[0], -1),], dim=1)
+        # Input_ids are in [B,S], input_ids[i] means ith image represented by token sequence; S is the number of tokens representing image
+        labels = input_ids.clone() 
+        if not use_eos:
+            # prepend condition token, [B,S] -> [B,S+1], e.g. class id 412, with token sequence [77, 49, 53, 69] -> [412+1025, 77, 49, 53, 69]
+            input_ids = torch.cat([condition.view(condition.shape[0], -1),
+                                input_ids.view(input_ids.shape[0], -1),
+                                ], dim=1)
+        else:
+            # Here we append eos to each sequencce [B,S] -> [B,1+S+1]
+            # E.g. class id 412, with token sequence [77, 49, 53, 69] -> [1024+1+412, 77, 49, 53, 69, 1024+1+1000+1]
+            input_ids = torch.cat([condition.view(condition.shape[0], -1),
+                                input_ids.view(input_ids.shape[0], -1),
+                                eos_ids.view(eos_ids.shape[0], -1)], dim=1)
+        
+        # mapping token ids into [B,S+1/S+2,embed_dim], here embed_dim is 768 in default settings
         embeddings = self.embeddings(input_ids)
         condition_token = embeddings[:, 0]
 
         # prepare positional embeddings.
         # shuffle pos embed
         pos_embed = self.pos_embed.repeat(input_ids.shape[0], 1, 1)
-        # cls_token, condition, the permute does not impact these prefix tokens.
+        # cls_token, condition, the permute does not impact these prefix tokens, itself prepend cls_token later
         prefix = 2
         pos_embed_prefix = pos_embed[:, :prefix]
         pos_embed_postfix = self.shuffle(pos_embed[:, prefix:prefix+self.image_seq_len], orders)
@@ -353,21 +387,31 @@ class RAR(BaseModel):
         if not is_sampling:
             # shuffle labels
             labels = self.shuffle(labels, orders)
-            # randomized permutation: during training, we need to shuffle the input_ids's order but not for sampling
-            embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:], orders)], dim=1)
+            # randomized permutation: during training, we need to shuffle the input_ids's order but not for sampling, but do not shuffle EoS
+            if not use_eos:
+                embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:], orders)], dim=1)
+            else:
+                embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:-1], orders), embeddings[:, -1:]], dim=1)
 
         x = embeddings
         # prepend the cls token
         cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
+        # [B, 1+S, emb_dim] -> [B, 1+1+S, emb_dim] / [B, 1+S+1, emb_dim] -> [B, 1+1+S+1, emb_dim]
         x = torch.cat((cls_tokens, x), dim=1)
 
         # add original pos embed
         x = x + torch.cat([pos_embed_prefix, pos_embed_postfix], dim=1)[:, :x.shape[1]]
 
         # add target-aware pos embed
-        target_aware_pos_embed = torch.cat(
-            [torch.zeros_like(x[:, :prefix-1]), target_aware_pos_embed_postfix, torch.zeros_like(x[:, -1:])], dim=1
-        )
+        if not use_eos:
+            target_aware_pos_embed = torch.cat(
+                [torch.zeros_like(x[:, :prefix-1]), target_aware_pos_embed_postfix, torch.zeros_like(x[:, -1:])], dim=1
+            )
+        else:
+            # the last permuted tokens / the eos token not requiring target
+            target_aware_pos_embed = torch.cat(
+                [torch.zeros_like(x[:, :prefix-1]), target_aware_pos_embed_postfix, torch.zeros_like(x[:, -2:])], dim=1
+            )
         x = x + target_aware_pos_embed[:, :x.shape[1]]
 
         # causal attention masking

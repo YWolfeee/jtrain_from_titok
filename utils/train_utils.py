@@ -884,6 +884,7 @@ def eval_loss(
     recon_error_matrix = [] # Record reconstruction error for different mask rate [B, 8]
     policy_recon_error_arr = [] # Record reconstruction error output from policy [B,]
     policy_rate_arr = [] # Record rate output from policy [B,]
+    proxy_codes = None
 
     for batch in eval_loader:
         if t >= sampled_batches:

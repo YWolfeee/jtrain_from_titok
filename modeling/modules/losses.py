@@ -201,6 +201,7 @@ class ReconstructionLoss_Stage2(torch.nn.Module):
             loss_config.perceptual_loss).eval()
         self.perceptual_weight = loss_config.perceptual_weight
         self.discriminator_iter_start = loss_config.discriminator_start
+        self.rate_weight = config.model.reconstruction_regularization.policy.rate_weight
 
         self.discriminator_factor = loss_config.discriminator_factor
         self.discriminator_weight = loss_config.discriminator_weight
@@ -244,9 +245,11 @@ class ReconstructionLoss_Stage2(torch.nn.Module):
         inputs = inputs.contiguous()
         reconstructions = reconstructions.contiguous()
         if self.reconstruction_loss == "l1":
-            reconstruction_loss = F.l1_loss(inputs, reconstructions, reduction="mean")
+            # reconstruction_loss = F.l1_loss(inputs, reconstructions, reduction="mean")
+            reconstruction_loss = F.l1_loss(inputs, reconstructions, reduction="none") # For unreduced logout
         elif self.reconstruction_loss == "l2":
-            reconstruction_loss = F.mse_loss(inputs, reconstructions, reduction="mean")
+            # reconstruction_loss = F.mse_loss(inputs, reconstructions, reduction="mean")
+            reconstruction_loss = F.mse_loss(inputs, reconstructions, reduction="none") # For unreduced logout
         else:
             raise ValueError(f"Unsuppored reconstruction_loss {self.reconstruction_loss}")
         reconstruction_loss *= self.reconstruction_weight
@@ -267,17 +270,23 @@ class ReconstructionLoss_Stage2(torch.nn.Module):
 
         d_weight *= self.discriminator_weight
 
+        # Consider rate loss
+        rate_loss_unreduced = 1 - extra_result_dict["mask_rate_value"] # (B,)
+
         # Compute quantizer loss.
         quantizer_loss = extra_result_dict["quantizer_loss"]
         total_loss = (
-            reconstruction_loss
+            reconstruction_loss.mean()
             + self.perceptual_weight * perceptual_loss
             + self.quantizer_weight * quantizer_loss
             + d_weight * discriminator_factor * generator_loss
         )
         loss_dict = dict(
             total_loss=total_loss.clone().detach(),
-            reconstruction_loss=reconstruction_loss.detach(),
+            reconstruction_loss=reconstruction_loss.mean().detach(),
+            reconstruction_loss_unreduced=reconstruction_loss.mean(dim=(1,2,3)).detach(), # keep batch info
+            rate_loss=rate_loss_unreduced.mean().detach(),
+            rate_loss_unreduced=rate_loss_unreduced.detach(),
             perceptual_loss=(self.perceptual_weight * perceptual_loss).detach(),
             quantizer_loss=(self.quantizer_weight * quantizer_loss).detach(),
             weighted_gan_loss=(d_weight * discriminator_factor * generator_loss).detach(),
