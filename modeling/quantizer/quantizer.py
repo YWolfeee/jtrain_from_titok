@@ -41,7 +41,7 @@ class VectorQuantizer(torch.nn.Module):
 
     # Ensure quantization is performed using f32
     @autocast(enabled=False)
-    def forward(self, z: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
+    def forward(self, z: torch.Tensor, mask_rate: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
         z = z.float()
         z = rearrange(z, 'b c h w -> b h w c').contiguous()
         z_flattened = rearrange(z, 'b h w c -> (b h w) c')
@@ -56,14 +56,23 @@ class VectorQuantizer(torch.nn.Module):
             torch.einsum('bd,dn->bn', z_flattened, embedding.T)
 
         min_encoding_indices = torch.argmin(d, dim=1) # num_ele
-        z_quantized = self.get_codebook_entry(min_encoding_indices).view(z.shape)
+        z_quantized = self.get_codebook_entry(min_encoding_indices).view(z.shape) # z_quantized shape: [B, 1, seq_len, emb_dim]
 
         if self.use_l2_norm:
             z = torch.nn.functional.normalize(z, dim=-1)
 
-        # compute loss for embedding
-        commitment_loss = self.commitment_cost * torch.mean((z_quantized.detach() - z) **2)
-        codebook_loss = torch.mean((z_quantized - z.detach()) **2)
+        # Create mask based on mask_rate to ignore rightmost tokens
+        batch_size, _, seq_len, _ = z.shape
+        keep_tokens = torch.floor(seq_len * (1 - mask_rate)).long().to(z.device)
+        mask = torch.arange(seq_len, device=z.device)[None] < keep_tokens[:, None]  # [B, seq_len]
+        mask = mask.unsqueeze(1).unsqueeze(-1)  # [B, 1, seq_len, 1]
+        mask = mask.to(z.device, z.dtype)
+
+        # Apply mask during loss computation
+        masked_diff_commitment = (z_quantized.detach() - z) * mask
+        masked_diff_codebook = (z_quantized - z.detach()) * mask
+        commitment_loss = self.commitment_cost * torch.sum(masked_diff_commitment ** 2) / mask.sum()
+        codebook_loss = torch.sum(masked_diff_codebook ** 2) / mask.sum()
 
         loss = commitment_loss + codebook_loss
 

@@ -353,6 +353,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         if fixed_mask_rate is not None: # For specific evaluation
             key_padding_mask = self.create_key_padding_mask(fixed_mask_rate)
             output_dict = {}
+            encode_mask_rate = fixed_mask_rate
         elif self.use_policy: # For training and general evaluation
             # in some cases, pairwise will be used
             use_pairwise = self.use_pairwise and self.training
@@ -368,7 +369,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 vae_results=vae_results
             )
             key_padding_mask = self.create_key_padding_mask(output_dict["sampled_mask_rate"]).to(x.device)
-
+            encode_mask_rate = output_dict["sampled_mask_rate"]
         else:
             raise ValueError("Either fixed_mask_rate or policy_net must be provided")
 
@@ -381,7 +382,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                     latent_tokens=self.latent_tokens,
                     key_padding_mask=key_padding_mask
                 )
-                z_quantized, result_dict = self.quantize(z)
+                z_quantized, result_dict = self.quantize(z, mask_rate=encode_mask_rate)
                 result_dict["quantizer_loss"] *= 0
                 result_dict["commitment_loss"] *= 0
                 result_dict["codebook_loss"] *= 0
@@ -393,7 +394,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 key_padding_mask=key_padding_mask
             )
             if self.quantize_mode == "vq":
-                z_quantized, result_dict = self.quantize(z)
+                z_quantized, result_dict = self.quantize(z, mask_rate=encode_mask_rate)
             elif self.quantize_mode == "vae":
                 posteriors = self.quantize(z)
                 z_quantized = posteriors.sample()
