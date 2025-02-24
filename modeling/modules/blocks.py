@@ -476,6 +476,10 @@ class PolicyNet(nn.Module):
                 mask_rate += r
             elif mode == "0.1_in_0.5":
                 mask_rate = (torch.rand_like(mask_rate) - 0.5) / 5 + 0.5
+            elif mode == "anneal_to_px":
+                start = 1 - self.elbo.start_mean
+                end = mask_rate
+                mask_rate = annealing_factor * end + (1-annealing_factor) * start
                 
             mask_rate = mask_rate.clip(self.elbo.get('lower', 0.0), 
                                        self.elbo.get('upper', 1.0))
