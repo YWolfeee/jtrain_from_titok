@@ -15,7 +15,7 @@ source ~/.bashrc
 
 config_name="titok_b512_4096_12"
 model_type="transformer"
-tag="understand_px-9w"
+tag="check_px_annealing_from0.5_mean=0.4"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -49,9 +49,9 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=False \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.02 \
-    model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
+    model.reconstruction_regularization.policy.annealing.use_annealing=True \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_end=0.5 \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
     \
@@ -63,16 +63,17 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
-    model.reconstruction_regularization.policy.elbo.elbo_mode="" \
-    model.reconstruction_regularization.policy.elbo.mean=0.5 \
+    model.reconstruction_regularization.policy.elbo.elbo_mode="anneal_to_px" \
+    model.reconstruction_regularization.policy.elbo.start_mean=0.5 \
+    model.reconstruction_regularization.policy.elbo.mean=0.4 \
     model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
-    training.per_gpu_batch_size=64 \
-    optimizer.params.learning_rate=4e-4 \
-    training.max_train_steps=250_000 \
+    training.per_gpu_batch_size=32 \
+    optimizer.params.learning_rate=2e-4 \
+    training.max_train_steps=500_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
-    experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
+    experiment.init_weight='results_try_new_design/titok_b512_4096_12+nll_only=0.5+rate_weight=1+elbo_lower=0.5+elbo_upper=0.5/checkpoint-250000/unwrapped_model/pytorch_model.bin'
     # experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=0.4+0.6+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
 
     # \
