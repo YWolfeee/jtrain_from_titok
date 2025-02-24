@@ -379,5 +379,7 @@ class ARLoss(torch.nn.Module):
         loss = self.criterion(shift_logits, shift_labels) # (B, codebook_size, [cond]+S)
         loss = torch.mean(loss, dim=-2) # (B, [cond]+S)
         loss = loss * loss_weight_mask # ignore the irrelevant padding tokens
-        correct_tokens = (torch.argmax(shift_logits, dim=1) == shift_labels).sum(dim=1) / shift_labels.size(1)
-        return loss, {"loss": loss, "correct_tokens": correct_tokens.mean()}
+        loss = loss.sum() / loss_weight_mask.sum() # weighted average
+        correct_tokens = (torch.argmax(shift_logits, dim=1) == shift_labels) * loss_weight_mask
+        correct_tokens = correct_tokens.sum() / loss_weight_mask.sum()
+        return loss, {"loss": loss, "correct_tokens": correct_tokens}

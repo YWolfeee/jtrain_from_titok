@@ -103,20 +103,28 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         scale = self.encoder.width ** -0.5
         self.latent_tokens = nn.Parameter(
             scale * torch.randn(self.num_latent_tokens, self.encoder.width))
-        
-        
             
         # QY: Add regularization for using partial tokens for reconstruction
         if config.model.use_reconstruction_regularization:
             self.use_regularization = True
-            self.max_mask_rate = config.model.reconstruction_regularization.max_mask_rate
+            try:
+                self.max_mask_rate = config.model.reconstruction_regularization.max_mask_rate
+            except:
+                self.max_mask_rate = 0.95
         else:
             self.use_regularization = False
             self.max_mask_rate = 0.0
         
         # Even for not using regularization, we still set these parameters for evaluation
-        self.regularization_name = config.model.reconstruction_regularization.name
-        self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
+        try:
+            self.regularization_name = config.model.reconstruction_regularization.name
+        except:
+            self.regularization_name = "matryoshka"
+        
+        try:
+            self.mask_ratio_method = config.model.reconstruction_regularization.mask_ratio_method
+        except:
+            self.mask_rate_method = "hierarchical"
 
         # Policy (Adaptive Masking or Not)
         try:
@@ -189,7 +197,11 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             raise NotImplementedError
 
-        self.feature_extractor_name = config.model.reconstruction_regularization.policy.feature_extractor_name # 'facebook/dinov2-base'
+        try:
+            self.feature_extractor_name = config.model.reconstruction_regularization.policy.feature_extractor_name # 'facebook/dinov2-base'
+        except:
+            self.feature_extractor_name = "facebook/dinov2-base"
+        
         self.feature_extractor = AutoModel.from_pretrained(self.feature_extractor_name)
         self.feature_extractor.eval()
         self.feature_extractor.requires_grad_(False) # OUTPUT SHAPE: [B, 257, 768] for base, [B, 257, 1024] for large
@@ -455,8 +467,24 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         # decoded.shape: [batch_size, 1024, H, W]
         return decoded
     
-    def encode_tokens(self, images):
-        encode_dict = self.encode(images)[1]
+    def encode_tokens(self, images, dino_input=None, fixed_mask_rate_val=0.0, use_fixed_mask_rate=False, vae_results=None):
+        if not isinstance(fixed_mask_rate_val, float):
+            raise ValueError("decode_mask_rate in forward() should be a float")
+
+        # QY: If dino_input is not provided, use the original image to form the DINO input
+        if dino_input is None:
+            print("\033[91mCHECK Not recommended settings: dino_input is None\033[0m")
+            dino_input = torch.nn.functional.interpolate(images, size=(224, 224), mode='bilinear', align_corners=False)
+                
+        # Get token features from DINO
+        with torch.no_grad():
+            token_features = self.feature_extractor(dino_input).last_hidden_state
+        if self.use_policy and not use_fixed_mask_rate:
+            # Use policy net to estimate the mask rate
+            z_quantized, encode_dict = self.encode(images, token_features, vae_results=vae_results)
+        else:
+            forward_mask_rate = self.get_mask_rate(images, fixed_mask_rate_val)
+            z_quantized, encode_dict = self.encode(images, token_features, forward_mask_rate)
         full_tokens = encode_dict["min_encoding_indices"].reshape(images.shape[0], -1)
         mask_rate = encode_dict["sampled_mask_rate"].reshape(images.shape[0], -1)
         return full_tokens, mask_rate

@@ -260,6 +260,10 @@ class RAR(BaseModel):
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
         self.random_ratio = 0.0
+        try:
+            self.adaptive_len = config.model.generation_pretrained_tokenizer.names == "ours"
+        except:
+            self.adaptive_len = False
 
     def enable_kv_cache(self):
         for block in self.blocks:
@@ -326,16 +330,19 @@ class RAR(BaseModel):
         condition[drop_label_mask] = self.none_condition_id
         return condition
     
-    def preprocess_input_ids(self, input_ids, mask_rate):
+    def preprocess_input_ids(self, input_ids, mask_rate=None):
+        if mask_rate is None:
+            mask_rate = torch.zeros_like(input_ids)
+        
         # E.g., input_ids: [[51, 12, 64, 21], [6, 195, 87, 40]]; mask_rate: [0.0, 0.25]
         # Postpend a placeholder token for handling 0.0 mask_rate
         batch_size = input_ids.shape[0]
         # input_ids: [[51, 12, 64, 21, 2027], [6, 195, 87, 40, 2027]], 2027 -> pad_id
-        input_ids = torch.cat([input_ids, torch.full((batch_size, 1), self.pad_id, device=input_ids.device)])
+        input_ids = torch.cat([input_ids, torch.full((batch_size, 1), self.pad_id, device=input_ids.device)], dim=1)
         kept_tokens_len = ((1 - mask_rate) * self.image_seq_len).long() # (B,)
         
         # Create position indices for comparison
-        positions = torch.arange(self.image_seq_len, device=input_ids.device)
+        positions = torch.arange(self.image_seq_len + 1, device=input_ids.device)
         positions = positions.unsqueeze(0).expand(batch_size, -1)  # [B, seq_len + 1]
         kept_tokens_len = kept_tokens_len.unsqueeze(1)  # [B, 1]
 
@@ -361,7 +368,6 @@ class RAR(BaseModel):
                    return_labels=False,
                    orders=None,
                    is_sampling=False,
-                   adaptive_len=False,
                    mask_rate=None):
         # Token ID Correspondance:
         #  [0, codebook_size - 1]                       : those are the learned quantized image tokens
@@ -376,7 +382,7 @@ class RAR(BaseModel):
             orders = self.get_raster_orders(input_ids)
 
         loss_weight_mask = torch.ones_like(input_ids)
-        if adaptive_len:
+        if self.adaptive_len:
             # Here we preprocess input_ids to handling various length
             # E.g. token sequence [77, 49, 53, 69] w/ mask_rate=0.25 -> [77, 49, 53, 2026, 2027], 2026 - eos; 2027 - pad
             input_ids, loss_weight_mask = self.preprocess_input_ids(input_ids, mask_rate)
@@ -406,11 +412,13 @@ class RAR(BaseModel):
         # target_aware_pos_embed_prefix = target_aware_pos_embed[:, :prefix]
         target_aware_pos_embed_postfix = self.shuffle(target_aware_pos_embed[:, prefix:prefix+self.image_seq_len], orders)
 
+        # print("labels.Shape:", labels.shape)
+        # print("orders.shape:", orders.shape)
         if not is_sampling:
             # shuffle labels
             labels = self.shuffle(labels, orders)
             # randomized permutation: during training, we need to shuffle the input_ids's order but not for sampling, but do not shuffle EoS
-            if not adaptive_len:
+            if not self.adaptive_len:
                 embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:], orders)], dim=1)
             else:
                 embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:-1], orders), embeddings[:, -1:]], dim=1)
@@ -425,7 +433,7 @@ class RAR(BaseModel):
         x = x + torch.cat([pos_embed_prefix, pos_embed_postfix], dim=1)[:, :x.shape[1]]
 
         # add target-aware pos embed
-        if not adaptive_len:
+        if not self.adaptive_len:
             # the last permuted token not requiring target as well
             target_aware_pos_embed = torch.cat(
                 [torch.zeros_like(x[:, :prefix-1]), target_aware_pos_embed_postfix, torch.zeros_like(x[:, -1:])], dim=1
@@ -468,7 +476,7 @@ class RAR(BaseModel):
         x = self.lm_head(x)
 
         # x: (B, 1+S+1, codebook_size); label: (B, S+1); loss_weight_mask: (B, S+1)
-        loss_weight_mask = loss_weight_mask.to(x.dtype, x.device)
+        loss_weight_mask = loss_weight_mask.to(dtype=x.dtype, device=x.device)
         if return_labels:
             return x, labels, loss_weight_mask
         return x

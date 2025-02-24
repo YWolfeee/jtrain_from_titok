@@ -10,7 +10,9 @@ experiment:
     resume: True
 
 model:
-    tokenizer:
+    generation_pretrained_tokenizer:
+        name: "maskgit-vq"
+        weight: "maskgit-vqgan-imagenet-f16-256.bin"
         
     vq_model:
         codebook_size: 1024

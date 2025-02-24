@@ -10,6 +10,12 @@ experiment:
     resume: True
 
 model:
+    use_reconstruction_regularization: False
+
+    generation_pretrained_tokenizer:
+        name: "titok"
+        weight: "to_be_continue"
+
     vq_model:
         codebook_size: 4096
         token_size: 12

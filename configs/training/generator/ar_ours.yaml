@@ -10,6 +10,26 @@ experiment:
     resume: True
 
 model:
+    use_reconstruction_regularization: True
+    
+    reconstruction_regularization:
+        use_policy: True
+        policy:
+            model_type: "gaussian_1"
+            num_heads: 4
+            hidden_size: 128
+            rate_weight: 0
+            use_pairwise: False
+            elbo:
+                nll_only: True
+                mean: 0.5
+                lower: 0.0
+                upper: 1.0
+
+    generation_pretrained_tokenizer:
+        name: "ours"
+        weight: "temp/stage2_checkpoint.bin"
+    
     vq_model:
         codebook_size: 4096
         token_size: 12
@@ -20,7 +40,7 @@ model:
         vit_dec_model_size: "base"
         vit_enc_patch_size: 16
         vit_dec_patch_size: 16
-        num_latent_tokens: 64
+        num_latent_tokens: 512
         finetune_decoder: False
         pretrained_tokenizer_weight: "maskgit-vqgan-imagenet-f16-256.bin"
     
@@ -32,7 +52,7 @@ model:
         dropout: 0.1
         attn_drop: 0.1
         class_label_dropout: 0.1
-        image_seq_len: 256
+        image_seq_len: 512
         condition_num_classes: 1000
 
         # sampling hyper-params for RAR-B
@@ -44,12 +64,12 @@ model:
         randomness_anneal_start: 125000 # 200 epoch
         randomness_anneal_end: 187500 # 300 epoch
 
+        modelling: "ar"
+
 dataset:
     params:
-        # use pretokenized dataset for speed-up
-        pretokenization: "maskgitvq.jsonl"
-        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..0252}.tar"
-        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0009}.tar"
+        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..0320}.tar"
+        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0049}.tar"
         num_workers_per_gpu: 12
     preprocessing:
         resize_shorter_edge: 256

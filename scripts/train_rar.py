@@ -26,7 +26,8 @@ from omegaconf import OmegaConf
 from utils.logger import setup_logger
 
 from utils.train_utils import (
-    get_config, create_model_and_loss_module, create_pretrained_tokenizer,
+    get_config, create_model_and_loss_module,
+    create_pretrained_tokenizer_for_generation,
     create_optimizer, create_lr_scheduler, create_dataloader,
     auto_resume, save_checkpoint, 
     train_one_epoch_generator)
@@ -67,7 +68,15 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers(config.experiment.name)
+        accelerator.init_trackers(project_name=config.experiment.project,
+            config=OmegaConf.to_container(config, resolve=True),
+            init_kwargs={
+                "wandb": {
+                    "entity": "pixel-based-LM",
+                    "name": config.experiment.name,
+                    "id": config.experiment.name,
+                }
+            })
         config_path = Path(output_dir) / "config.yaml"
         logger.info(f"Saving config to {config_path}")
         OmegaConf.save(config, config_path)
@@ -80,12 +89,12 @@ def main():
     if accelerator.local_process_index == 0:
         # download the maskgit-vq tokenizer weight
         from huggingface_hub import hf_hub_download
-        hf_hub_download(repo_id="fun-research/TiTok", filename=f"{config.model.vq_model.pretrained_tokenizer_weight}", local_dir="./")
-        hf_hub_download(repo_id="yucornetto/RAR", filename=f"{config.dataset.params.pretokenization}", local_dir="./")
+        # hf_hub_download(repo_id="fun-research/TiTok", filename=f"{config.model.vq_model.pretrained_tokenizer_weight}", local_dir="./")
+        # hf_hub_download(repo_id="yucornetto/RAR", filename=f"{config.dataset.params.pretokenization}", local_dir="./")
     accelerator.wait_for_everyone()
 
     # get tokenizer for maskgit-vq / titok / ours
-    tokenizer = create_pretrained_tokenizer(config)
+    tokenizer = create_pretrained_tokenizer_for_generation(config)
     tokenizer.to(accelerator.device)
 
     model, ema_model, loss_module = create_model_and_loss_module(
@@ -102,10 +111,12 @@ def main():
     # Prepare everything with accelerator.
     logger.info("Preparing model, optimizer and dataloaders")
     if config.dataset.params.get("pretokenization", ""):
+        logger.info("Use pretokenization")
         model, optimizer, lr_scheduler, train_dataloader = accelerator.prepare(
             model, optimizer, lr_scheduler, train_dataloader
         )
     else:
+        logger.info("No use pretokenization")
         # The dataloader are already aware of distributed training, so we don't need to prepare them.
         model, optimizer, lr_scheduler = accelerator.prepare(
             model, optimizer, lr_scheduler
@@ -142,6 +153,7 @@ def main():
 
     for current_epoch in range(first_epoch, num_train_epochs):
         accelerator.print(f"Epoch {current_epoch}/{num_train_epochs-1} started.")
+        logger.info(f"Epoch {current_epoch}/{num_train_epochs-1} started.")
         global_step = train_one_epoch_generator(config, logger, accelerator,
                             model, ema_model, loss_module,
                             optimizer,
