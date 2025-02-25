@@ -1,0 +1,24 @@
+#!/bin/bash
+echo starts
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.5 False 0.5 results_final titok_b512_4096_12.yaml+method=titok+p_mean=0.5 titok try_paper_runs  > logs/titok_b512_4096_12.yaml+method=titok+p_mean=0.5.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.5 False 0.5 results_final titok_b512_4096_12.yaml+method=elastic+p_mean=0.5 elastic try_paper_runs  > logs/titok_b512_4096_12.yaml+method=elastic+p_mean=0.5.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.4375 False 0.5 results_final titok_b512_4096_12.yaml+method=titok+p_mean=0.4375 titok try_paper_runs  > logs/titok_b512_4096_12.yaml+method=titok+p_mean=0.4375.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.4375 False 0.5 results_final titok_b512_4096_12.yaml+method=elastic+p_mean=0.4375 elastic try_paper_runs  > logs/titok_b512_4096_12.yaml+method=elastic+p_mean=0.4375.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.375 False 0.5 results_final titok_b512_4096_12.yaml+method=titok+p_mean=0.375 titok try_paper_runs  > logs/titok_b512_4096_12.yaml+method=titok+p_mean=0.375.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.375 False 0.5 results_final titok_b512_4096_12.yaml+method=elastic+p_mean=0.375 elastic try_paper_runs  > logs/titok_b512_4096_12.yaml+method=elastic+p_mean=0.375.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.25 False 0.5 results_final titok_b512_4096_12.yaml+method=titok+p_mean=0.25 titok try_paper_runs  > logs/titok_b512_4096_12.yaml+method=titok+p_mean=0.25.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.25 False 0.5 results_final titok_b512_4096_12.yaml+method=elastic+p_mean=0.25 elastic try_paper_runs  > logs/titok_b512_4096_12.yaml+method=elastic+p_mean=0.25.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.125 False 0.5 results_final titok_b512_4096_12.yaml+method=titok+p_mean=0.125 titok try_paper_runs  > logs/titok_b512_4096_12.yaml+method=titok+p_mean=0.125.log 2>&1 &
+
+srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh titok_b512_4096_12.yaml 32 2e-4 True True 0.125 False 0.5 results_final titok_b512_4096_12.yaml+method=elastic+p_mean=0.125 elastic try_paper_runs  > logs/titok_b512_4096_12.yaml+method=elastic+p_mean=0.125.log 2>&1 &
+wait
+echo finished
