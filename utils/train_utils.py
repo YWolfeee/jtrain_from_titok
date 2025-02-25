@@ -74,8 +74,19 @@ class AverageMeter(object):
 
 
 def create_pretrained_tokenizer(config, accelerator=None):
+    if config.model.vq_model.finetune_decoder:
+        # No need of pretrained tokenizer at stage2
+        pretrained_tokenizer = None
+    else:
+        pretrained_tokenizer = PretrainedTokenizer(config.model.vq_model.pretrained_tokenizer_weight)
+        if accelerator is not None:
+            pretrained_tokenizer.to(accelerator.device)
+    return pretrained_tokenizer
+
+
+def create_pretrained_tokenizer_for_generation(config, accelerator=None):
     try:
-        pretrained_tokenizer_name = config.model.vq_model.pretrained_tokenizer_name
+        pretrained_tokenizer_name = config.model.generation_pretrained_tokenizer.name
     except:
         pretrained_tokenizer_name = "maskgit-vq"
 
@@ -84,11 +95,21 @@ def create_pretrained_tokenizer(config, accelerator=None):
             # No need of pretrained tokenizer at stage2
             pretrained_tokenizer = None
         else:
-            pretrained_tokenizer = PretrainedTokenizer(config.model.vq_model.pretrained_tokenizer_weight)
+            pretrained_tokenizer = PretrainedTokenizer(config.model.generation_pretrained_tokenizer.weight)
             if accelerator is not None:
                 pretrained_tokenizer.to(accelerator.device)
     elif pretrained_tokenizer_name in ["titok", "ours"]:
-        pretrained_tokenizer = TiTok.from_pretrained(config.model.vq_model.pretrained_tokenizer_weight, config=config)
+        pretrained_tokenizer = TiTok(config=config)
+        model_weight = torch.load(config.model.generation_pretrained_tokenizer.weight, map_location="cpu")
+        # Add the MaskGIT-VQGAN's quantizer/decoder weight as well
+        maskgit_vqgan_tokenizer_weight = torch.load(
+            config.model.vq_model.pretrained_tokenizer_weight, map_location="cpu"
+        )
+        # Only keep the quantize and decoder part
+        mask_git_vqgan_tokenizer_weight = {"pixel_" + k:v for k,v in maskgit_vqgan_tokenizer_weight.items() if not "encoder." in k}
+        model_weight.update(mask_git_vqgan_tokenizer_weight)
+        
+        msg = pretrained_tokenizer.load_state_dict(model_weight, strict=False)
         if accelerator is not None:
             pretrained_tokenizer.to(accelerator.device)
     else:
@@ -713,6 +734,7 @@ def train_one_epoch_generator(
 
     model.train()
 
+    logger.info("Start iterating the dataloader")
     for i, batch in enumerate(train_dataloader):
         model.train()
         if config.dataset.params.get("pretokenization", ""):
@@ -733,6 +755,11 @@ def train_one_epoch_generator(
                 conditions = batch["class_id"].to(
                     accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
                 )
+                dino_input = batch["dino_input"].to(
+                    accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+                )
+                vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+                    for k, v in batch["vae_results"].items()}
 
                 # Encode images on the flight.
                 with torch.no_grad():
@@ -742,9 +769,10 @@ def train_one_epoch_generator(
                     except:
                         use_regularization = False
                     if not use_regularization:
-                        input_tokens = tokenizer.encode(images)[1]["min_encoding_indices"].reshape(images.shape[0], -1)
+                        input_tokens = tokenizer.encode(images, use_fixed_mask_rate=True)[1]["min_encoding_indices"].reshape(images.shape[0], -1)
+                        mask_rate = torch.zeros_like(input_tokens)
                     else:
-                        input_tokens = tokenizer.encode(images)[1]["min_encoding_indices"].reshape(images.shape[0], -1)
+                        input_tokens, mask_rate = tokenizer.encode_tokens(images, dino_input=dino_input, vae_results=vae_results)
             else:
                 raise ValueError(f"Not found valid keys: {batch.keys()}")
 
