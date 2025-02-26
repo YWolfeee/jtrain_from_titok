@@ -29,9 +29,9 @@
  
 #SBATCH --time=04:00:00             # Time limit
 #SBATCH --account=dir_cosmos_misc
-#SBATCH --partition=batch
+#SBATCH --partition=pool0_singlenode
 #SBATCH --mem-per-gpu=72G 
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=64
 #SBATCH --gpus-per-node=8
 #SBATCH --no-requeue                # Control all retries/attempts explicitly
 #SBATCH --dependency=singleton      # Singleton dependency - run one job at a time
@@ -51,8 +51,7 @@ output_root=$2
 # init_weight=$7
 
 echo $call_file
-# echo "Running config: $config_name; batch_size: ${per_gpu_batch_size}; learning_rate: ${learning_rate}; method: ${method}; output_root: ${output_root}; wandb_projects: ${wandb_projects}."
-
+echo $output_root
 
 # Enable strict error handling to improve script reliability.
 set -euo pipefail
@@ -206,8 +205,7 @@ function launch_more_jobs() {
     fi
     log_msg "Launching ${num_jobs_to_launch} jobs..."
  
-    command="sbatch --job-name=${SLURM_JOB_NAME} --output=${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out exp_scripts/long_slurm_group.sh $call_file"
-    # command="sbatch --job-name=${SLURM_JOB_NAME} --output='${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out' exp_scripts/long_slurm.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_annealing $is_increasing $use_self_distilliation $output_root"
+    command="sbatch --job-name=${SLURM_JOB_NAME} --output=${output_root}/${SLURM_JOB_NAME}/logs/slurm_%j.out --nodes=${SLURM_NNODES} exp_scripts/long_slurm_group.sh $call_file $output_root "
     echo "$command"
     for ((i = 1; i <= ${num_jobs_to_launch}; i++)); do
     log_msg "[JobId=${SLURM_JOB_ID}] Launching next job..."
@@ -251,14 +249,8 @@ function is_fatal_non_retriable_error() {
 function do_actual_work() {
     # TODO: Replace below with your job commands here
     # sleep 30
-    export ENROOT_DATA_PATH="/lustre/fsw/portfolios/dir/users/haotiany/workspaces"
+    # export ENROOT_DATA_PATH=$workspace
     bash ${call_file}
-    # python ./exp_scripts/group_job_dispatcher.py $config_name $per_gpu_batch_size $learning_rate $method $output_root $wandb_projects $init_weight $SLURM_NNODES
-    # enroot list -f
-    # pwd
-    # enroot start --rw --mount /lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training my_workspace \
-        # /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh $config_name $per_gpu_batch_size $learning_rate $use_reconstruction_regularization $use_ours $rate_weight $elbo_lower ${elbo_upper} ${output_root} ${SLURM_JOB_NAME} $elbo_mode
-    
     wait
 
     # Simulate a coin toss: generate a random number
@@ -268,7 +260,7 @@ function do_actual_work() {
     else
     log_msg "Coin toss result: Failure (toss=$toss)"
     # simulate failure
-    cat nonexistent_file.txt
+    # cat nonexistent_file.txt
     fi
 }
  

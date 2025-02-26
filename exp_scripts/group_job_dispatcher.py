@@ -1,7 +1,12 @@
 import os
 import sys
 
-config_path = sys.argv[1]
+mount_from = "/project/cosmos/haotiany/joint_training/"
+mount_to = "/joint_training"
+container_path = "/project/cosmos/haotiany/docker_images/imaginaire4_v9.2.2.sqsh"
+main_file = "exp_scripts/main_newloss_group.sh"
+
+config_name = sys.argv[1]
 batch_size = sys.argv[2]
 lr = sys.argv[3]
 method = sys.argv[4]
@@ -16,7 +21,7 @@ except:
     init_weight = ""
 # n_nodes = sys.argv[8]
 
-print(f"config_path={config_path}, batch_size={batch_size}, lr={lr}, method={method}, output_root={output_root}, wandb_projects={wandb_projects}, init_weight={init_weight}")
+print(f"config_name={config_name}, batch_size={batch_size}, lr={lr}, method={method}, output_root={output_root}, wandb_projects={wandb_projects}, init_weight={init_weight}")
 
 os.makedirs(output_root, exist_ok=True)
 
@@ -30,14 +35,17 @@ f = open(file_path, "w")
 f.write("#!/bin/bash\n")
 f.write("echo starts\n")
 
+f.write(f"mount_from={mount_from}\n")
+f.write(f"mount_to={mount_to}\n")
+f.write(f"container_path={container_path}\n")
+
 if method == "ours":
-    for p_mean in [0.5]:
-    # for p_mean in [0.5, 0.4375, 0.375, 0.25, 0.125]:
+    # for p_mean in [0.5]:
+    for p_mean in [0.5, 0.4375, 0.375, 0.25, 0.125]:
         for anneal in [False, True]:
             for finetune in [False, True]:
                 start_mean = 0.5
-                job_name = f"{config_path}+method={method}+p_mean={p_mean}+anneal={anneal}+finetune={finetune}"
-                config_name = config_path.split(".")[0]
+                job_name = f"{config_name}+method={method}+p_mean={p_mean}+anneal={anneal}+finetune={finetune}"
                 this_weight = init_weight if finetune else ""
 
                 if anneal:
@@ -46,21 +54,22 @@ if method == "ours":
                     elbo_mode = "px"
 
                 f.write("\n")
-                command = f"srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh {config_path} {batch_size} {lr} True True {p_mean} {anneal} {start_mean} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} > logs/{job_name}.log 2>&1 &"
+                command = f"srun --nodes=1 --ntasks=1 --cpus-per-task=64 --mem-per-gpu=72G --gpus=8 --exclusive --container-mounts=$mount_from:$mount_to --container-image=$container_path /bin/bash $mount_to/jtrain_from_titok/{main_file} {config_name} {batch_size} {lr} True True {p_mean} {anneal} {start_mean} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} >> logs/{job_name}.log 2>&1 &"
                 f.write(command + "\n")
+                f.write("sleep 0.5\n")
+
                 # os.system(command)
                 idx += 1
 elif method =="baseline":
     for elbo_mode in ['titok', 'elastic']:
         for p_mean in [0.5, 0.4375, 0.375, 0.25, 0.125]:
             start_mean = 0.5
-            job_name = f"{config_path}+method={elbo_mode}+p_mean={p_mean}"
-            config_name = config_path.split(".")[0]
+            job_name = f"{config_name}+method={elbo_mode}+p_mean={p_mean}"
             this_weight = ""
             anneal = False
 
             f.write("\n")
-            command = f"srun --nodes=1 --ntasks=1 --gpus=8 --exclusive --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training --container-image=./docker_images/imaginaire4_v9.2.2.sqsh /bin/bash /joint_training/jtrain_from_titok/exp_scripts/main_newloss.sh {config_path} {batch_size} {lr} True True {p_mean} {anneal} {start_mean} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} > logs/{job_name}.log 2>&1 &"
+            command = f"srun --nodes=1 --ntasks=1 --cpus-per-task=64 --mem-per-gpu=72G --gpus=8 --exclusive --container-mounts=$mount_from:$mount_to --container-image=$container_path /bin/bash $mount_to/jtrain_from_titok/{main_file} {config_name} {batch_size} {lr} True True {p_mean} {anneal} {start_mean} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} > logs/{job_name}.log 2>&1 &"
             f.write(command + "\n")
 
 

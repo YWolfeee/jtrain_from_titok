@@ -2,8 +2,8 @@
 
 #SBATCH --account=dir_cosmos_misc
 #SBATCH --partition=batch
-#SBATCH --container-mounts=/lustre/fsw/portfolios/dir/users/haotiany/joint_training/:/joint_training
-#SBATCH --container-image=/lustre/fsw/portfolios/dir/users/haotiany/docker_images/imaginaire4_v9.2.2.sqsh
+#SBATCH --container-mounts=/project/cosmos/haotiany/joint_training/:/joint_training
+#SBATCH --container-image=/project/cosmos/haotiany/docker_images/imaginaire4_v9.2.2.sqsh
 #SBATCH --gpus-per-node=8
 #SBATCH --nodes=1
 #SBATCH --time=4:00:00
@@ -15,7 +15,7 @@ source ~/.bashrc
 
 config_name="titok_b512_4096_12"
 model_type="transformer"
-tag="check_px_annealing_from0.5_mean=0.4"
+tag="new_cluster_check_px_annealing_from0.5_mean=0.4"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -73,7 +73,7 @@ accelerate launch \
     training.max_train_steps=500_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
-    experiment.init_weight='results_try_new_design/titok_b512_4096_12+nll_only=0.5+rate_weight=1+elbo_lower=0.5+elbo_upper=0.5/checkpoint-250000/unwrapped_model/pytorch_model.bin'
+    experiment.init_weight='checkpoints/titok_b512_4096_12+titok+p_mean=0.5.bin'
     # experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=0.4+0.6+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
 
     # \
