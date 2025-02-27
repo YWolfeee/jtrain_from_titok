@@ -228,15 +228,24 @@ def main():
         # Get vae_input from batch
         if "image" in batch:
             fnames = batch['__key__']
-            images = batch["image"].to(
+            # Get local rank and batch size
+            local_rank = accelerator.local_process_index
+            batch_size = len(fnames) // accelerator.num_processes
+            
+            # Calculate start and end indices for this process's portion
+            start_idx = local_rank * batch_size
+            end_idx = start_idx + batch_size
+            
+            # Get this process's portion of the batch
+            
+            images = batch["image"][start_idx:end_idx].to(
                 accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
             )
-            dino_input = batch["dino_input"].to(
+            dino_input = batch["dino_input"][start_idx:end_idx].to(
                 accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
             )
-            # fnames = batch["__key__"] # Seems not used
-            vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
-               for k, v in batch["vae_results"].items()}
+            vae_results = {k: v[start_idx:end_idx].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
+                for k, v in batch["vae_results"].items()}
         
         local_model = accelerator.unwrap_model(model)
         with torch.no_grad():
@@ -246,6 +255,12 @@ def main():
             logger.info(f"Full tokens shape: {full_tokens.shape}", main_process_only=False)
             logger.info(f"First 5 mask rates: {mask_rate[:5]}", main_process_only=False)
             logger.info(f"Mask rate shape: {mask_rate.shape}", main_process_only=False)
+
+        # gather results
+        # Gather results across processes
+        accelerator.wait_for_everyone()
+        full_tokens = accelerator.gather(full_tokens)
+        mask_rate = accelerator.gather(mask_rate)
         
         # Only save stats on main process
         if accelerator.is_main_process:

@@ -1,10 +1,10 @@
 #PBS -N zexp_pretokenize
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=12:mem=90gb:ngpus=1:host=cvml11
+#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml11
 
 config_name='titok_b512_4096_12'
 start_batch=0
-dataset_split="val"
+dataset_split="train"
 tag="pretokenize_after${start_batch}_${dataset_split}_cvml11"
 
 nvidia-smi
@@ -67,6 +67,6 @@ WANDB_MODE=offline accelerate launch \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000049}.tar" \
     dataset.params.num_workers_per_gpu=12 \
-    training.per_gpu_batch_size=1024 \
+    training.per_gpu_batch_size=4096 \
     start_batch=${start_batch} \
     dataset_split=${dataset_split}
