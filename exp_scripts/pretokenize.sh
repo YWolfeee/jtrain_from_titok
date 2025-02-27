@@ -1,32 +1,30 @@
-#!/bin/bash
+#PBS -N zexp_pretokenize
+#PBS -S /bin/bash
+#PBS -l select=1:ncpus=24:mem=180gb:ngpus=4:host=cvml11
 
-#SBATCH --account=dir_cosmos_misc
-#SBATCH --partition=batch
-#SBATCH --container-mounts=/project/cosmos/haotiany/joint_training/:/joint_training
-#SBATCH --container-image=/project/cosmos/haotiany/docker_images/imaginaire4_v9.2.2.sqsh
-#SBATCH --gpus-per-node=8
-#SBATCH --nodes=1
-#SBATCH --time=4:00:00
+config_name='titok_b512_4096_12'
+start_batch=0
+dataset_split="train"
+tag="pretokenize_after${start_batch}_${dataset_split}_cvml11"
 
-# nvidia-smi
-cd /joint_training/jtrain_from_titok
-pwd
+nvidia-smi
+cd ~/jtrain_from_titok
 source ~/.bashrc
+eval "$(conda shell.bash hook)"
+conda activate titok
 
-config_name="titok_b512_4096_12"
-model_type="transformer"
-tag="new_cluster_check_px_annealing_from0.5_mean=0.4"
-ngpus=8
 export PYTHONPATH=$(pwd)
+export WANDB_INIT_TIMEOUT=300
 
-# python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
-accelerate launch \
-    --num_machines=1 --num_processes=${ngpus} --machine_rank=$SLURM_NODEID \
+WANDB_MODE=offline accelerate launch \
+    --num_machines=1 --num_processes=2 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
-    scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
+    scripts/titok_pretokenization.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
-    experiment.name="${config_name}_${tag}" \
+    experiment.name="${tag}" \
     experiment.output_dir="temp/${tag}" \
+    experiment.init_weight="temp/stage1_checkpoint.bin" \
+    \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
@@ -49,9 +47,9 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=True \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
-    model.reconstruction_regularization.policy.annealing.alpha_end=0.5 \
+    model.reconstruction_regularization.policy.annealing.use_annealing=False \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.02 \
+    model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
     \
@@ -63,19 +61,12 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
-    model.reconstruction_regularization.policy.elbo.elbo_mode="anneal_to_px" \
-    model.reconstruction_regularization.policy.elbo.start_mean=0.5 \
-    model.reconstruction_regularization.policy.elbo.mean=0.4 \
+    model.reconstruction_regularization.policy.elbo.mean=0.5 \
     model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
-    training.per_gpu_batch_size=32 \
-    optimizer.params.learning_rate=2e-4 \
-    training.max_train_steps=500_000 \
-    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
-    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
-    experiment.init_weight='checkpoints/titok_b512_4096_12+titok+p_mean=0.5.bin'
-    # experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=0.4+0.6+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
-
-    # \
-    # dataset.params.train_shards_path_or_url='small_datasets/imagenet-train-000000.tar' \
-    # dataset.params.eval_shards_path_or_url='small_datasets/imagenet-val-000000.tar' \
+    dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \
+    dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000049}.tar" \
+    dataset.params.num_workers_per_gpu=12 \
+    training.per_gpu_batch_size=4096 \
+    start_batch=${start_batch} \
+    dataset_split=${dataset_split}

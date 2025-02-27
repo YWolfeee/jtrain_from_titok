@@ -274,7 +274,7 @@ def create_lr_scheduler(config, logger, accelerator, optimizer, discriminator_op
     return lr_scheduler, discriminator_lr_scheduler
 
 
-def create_dataloader(config, logger, accelerator):
+def create_dataloader(config, logger, accelerator, return_dataset=True):
     """Creates data loader for training and testing."""
     logger.info("Creating dataloaders.")
     total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
@@ -300,6 +300,11 @@ def create_dataloader(config, logger, accelerator):
         random_crop=preproc_config.random_crop,
         random_flip=preproc_config.random_flip,
     )
+    
+    if return_dataset:
+        train_dataset, eval_dataset, train_eval_dataset = dataset.train_dataset, dataset.eval_dataset, dataset.train_eval_dataset
+        return train_dataset, eval_dataset, train_eval_dataset
+    
     train_dataloader, eval_dataloader = dataset.train_dataloader, dataset.eval_dataloader
     train_eval_dataloader = dataset.train_eval_dataloader
     

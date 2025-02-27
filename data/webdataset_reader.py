@@ -131,6 +131,7 @@ class SimpleImageDataset:
         random_flip = True,
         normalize_mean: List[float] = [0., 0., 0.],
         normalize_std: List[float] = [1., 1., 1.],
+        return_dataset = False
     ):
         """Initializes the WebDatasetReader class.
 
@@ -217,6 +218,31 @@ class SimpleImageDataset:
 
         # Each worker is iterating over the complete dataset.
         self._train_dataset = wds.DataPipeline(*pipeline).with_epoch(num_worker_batches)
+
+        # Create eval dataset and loader.
+        pipeline = [
+            wds.SimpleShardList(eval_shards_path),
+            wds.split_by_worker,
+            wds.tarfile_to_samples(handler=wds.ignore_and_continue),
+            *test_processing_pipeline,
+            wds.batched(per_gpu_batch_size, partial=True, collation_fn=default_collate),
+        ]
+        self._eval_dataset = wds.DataPipeline(*pipeline)
+        
+
+    # Create train_eval dataset and loader. (this is within training dataset but used for evaluation such as reconstruction)
+        pipeline = [
+            wds.SimpleShardList(train_shards_path),
+            wds.split_by_worker,
+            wds.tarfile_to_samples(handler=wds.ignore_and_continue),
+            *train_processing_pipeline,
+            wds.batched(per_gpu_batch_size, partial=True, collation_fn=default_collate),
+        ]
+        self._train_eval_dataset = wds.DataPipeline(*pipeline)
+        
+        if return_dataset:
+            return
+        
         self._train_dataloader = wds.WebLoader(
             self._train_dataset,
             batch_size=None,
@@ -228,16 +254,7 @@ class SimpleImageDataset:
         # Add meta-data to dataloader instance for convenience.
         self._train_dataloader.num_batches = num_batches
         self._train_dataloader.num_samples = num_samples
-
-        # Create eval dataset and loader.
-        pipeline = [
-            wds.SimpleShardList(eval_shards_path),
-            wds.split_by_worker,
-            wds.tarfile_to_samples(handler=wds.ignore_and_continue),
-            *test_processing_pipeline,
-            wds.batched(per_gpu_batch_size, partial=True, collation_fn=default_collate),
-        ]
-        self._eval_dataset = wds.DataPipeline(*pipeline)
+        
         self._eval_dataloader = wds.WebLoader(
             self._eval_dataset,
             batch_size=None,
@@ -246,16 +263,7 @@ class SimpleImageDataset:
             pin_memory=True,
             persistent_workers=True,
         )
-
-    # Create train_eval dataset and loader. (this is within training dataset but used for evaluation such as reconstruction)
-        pipeline = [
-            wds.SimpleShardList(train_shards_path),
-            wds.split_by_worker,
-            wds.tarfile_to_samples(handler=wds.ignore_and_continue),
-            *train_processing_pipeline,
-            wds.batched(per_gpu_batch_size, partial=True, collation_fn=default_collate),
-        ]
-        self._train_eval_dataset = wds.DataPipeline(*pipeline)
+        
         self._train_eval_dataloader = wds.WebLoader(
             self._train_eval_dataset,
             batch_size=None,

@@ -22,7 +22,8 @@ elbo_mode=${11}
 ngpus=8
 
 source ~/.bashrc
-pip show torchinfo
+pip install torchinfo
+# pip show torchinfo
 which accelerate
 cd /joint_training/jtrain_from_titok
 export PYTHONPATH='/joint_training/jtrain_from_titok'
