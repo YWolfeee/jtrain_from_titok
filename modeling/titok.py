@@ -186,6 +186,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
 
         self.apply(self._init_weights)
 
+        try:
+            self.use_encoder_mask = config.model.reconstruction_regularizaion.use_encoder_mask
+        except:
+            self.use_encoder_mask = False
+        self.encoder_mask = self.create_encoder_attn_mask()
+
         if self.quantize_mode == "vq":
             self.quantize = VectorQuantizer(
                 codebook_size=config.model.vq_model.codebook_size,
@@ -359,6 +365,15 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         key_padding_mask = torch.cat([mask_first, mask_second], dim=1)
         
         return key_padding_mask
+    
+    def create_encoder_attn_mask(self):
+        full_seq_len = 1 + self.num_of_image_tokens + self.num_of_latent_tokens
+        if self.use_encoder_mask:
+            attn_mask = torch.tril(torch.ones(full_seq_len, full_seq_len, dtype=torch.bool))
+            attn_mask[:self.num_of_image_tokens, :self.num_of_image_tokens] = True
+        else:
+            attn_mask = None
+        return attn_mask
 
     def encode(self, x, token_features: torch.Tensor, fixed_mask_rate: torch.Tensor = None, vae_results: dict = None):
         # Get key padding mask: if fixed mask rate is provided, use it; otherwise, use policy net to get mask rate
@@ -392,7 +407,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 z, _ = self.encoder(
                     pixel_values=x, 
                     latent_tokens=self.latent_tokens,
-                    key_padding_mask=key_padding_mask
+                    key_padding_mask=key_padding_mask,
+                    attn_mask=self.encoder_mask
                 )
                 z_quantized, result_dict = self.quantize(z, mask_rate=encode_mask_rate)
                 result_dict["quantizer_loss"] *= 0
@@ -403,7 +419,8 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             z, _ = self.encoder(
                 pixel_values=x, 
                 latent_tokens=self.latent_tokens,
-                key_padding_mask=key_padding_mask
+                key_padding_mask=key_padding_mask,
+                attn_mask=self.encoder_mask
             )
             if self.quantize_mode == "vq":
                 z_quantized, result_dict = self.quantize(z, mask_rate=encode_mask_rate)

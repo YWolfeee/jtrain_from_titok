@@ -173,7 +173,7 @@ def main():
     model, eval_dataloader, train_eval_dataloader = accelerator.prepare(model, eval_dataloader, train_eval_dataloader)
     # model = accelerator.prepare(model)
 
-    total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
+    total_batch_size_without_accum = config.training.per_gpu_batch_size # in this script, per_gpu_batch_size is simply the total gpu batch size
     try:
         if config.dataset_split == "val":
             iter_dataloader = eval_dataloader

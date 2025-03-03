@@ -1,12 +1,12 @@
 #PBS -N zexp_stage1_test
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=12:mem=90gb:ngpus=2:host=cvml10
+#PBS -l select=1:ncpus=12:mem=90gb:ngpus=2:host=cvml06
 
 config_name='titok_b128_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
 rate_weight=0
-tag="test_stage1_quantizer_ignoring_masked_tokens_fix_bugs"
+tag="test_stage1_use_encoder_mask"
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -28,6 +28,8 @@ accelerate launch \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
     model.reconstruction_regularization.max_mask_rate=0.95 \
+    \
+    model.reconstruction_regularization.use_encoder_mask=True \
     \
     model.reconstruction_regularization.use_annealing=False \
     model.reconstruction_regularization.annealing.time_start=0.0 \

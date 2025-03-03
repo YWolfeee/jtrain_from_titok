@@ -17,7 +17,7 @@ export PYTHONPATH=$(pwd)
 export WANDB_INIT_TIMEOUT=300
 
 WANDB_MODE=offline accelerate launch \
-    --num_machines=1 --num_processes=2 --machine_rank=0 \
+    --num_machines=1 --num_processes=4 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/titok_pretokenization.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="TEMP_QY" \
