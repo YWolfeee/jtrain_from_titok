@@ -4,7 +4,7 @@ import sys
 mount_from = "/project/cosmos/haotiany/joint_training/"
 mount_to = "/joint_training"
 container_path = "/project/cosmos/haotiany/docker_images/imaginaire4_v9.2.2.sqsh"
-main_file = "exp_scripts/main_newloss_group.sh"
+main_file = "exp_scripts/main_newloss_group_causal.sh"
 
 config_name = sys.argv[1]
 batch_size = sys.argv[2]
@@ -17,7 +17,7 @@ file_path=sys.argv[7]
 try:
     init_weight = sys.argv[8]
 except:
-    assert method != "ours"
+    # assert method != "ours"
     init_weight = ""
 # n_nodes = sys.argv[8]
 
@@ -40,10 +40,10 @@ f.write(f"mount_to={mount_to}\n")
 f.write(f"container_path={container_path}\n")
 
 if method == "ours":
-    # for p_mean in [0.5]:
-    for p_mean in [0.5, 0.4375, 0.375, 0.25, 0.125]:
+    for p_mean in [0.5, 0.25]:
+    # for p_mean in [0.5, 0.4375, 0.375, 0.25, 0.125]:
         for anneal in [False, True]:
-            for finetune in [False, True]:
+            for finetune in [False]:
                 start_mean = 0.5
                 job_name = f"{config_name}+method={method}+p_mean={p_mean}+anneal={anneal}+finetune={finetune}"
                 this_weight = init_weight if finetune else ""

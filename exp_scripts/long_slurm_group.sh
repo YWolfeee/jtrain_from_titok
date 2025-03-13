@@ -27,9 +27,9 @@
 #SBATCH --job-name=${SLURM_JOB_NAME}     # Specify job name, note that this is they primary "key" for the chained-jobs.
                                                         # Use different job names for multiple concurrent running long jobs.
  
-#SBATCH --time=04:00:00             # Time limit
-#SBATCH --account=dir_cosmos_misc
-#SBATCH --partition=pool0_singlenode
+#SBATCH --time=24:00:00             # Time limit
+#SBATCH --account=dir_cosmos_base
+#SBATCH --partition=pool0_datahall_a
 #SBATCH --mem-per-gpu=72G 
 #SBATCH --cpus-per-task=64
 #SBATCH --gpus-per-node=8
@@ -343,4 +343,4 @@ update_state
  
 do_actual_work
 
-EOF
+# EOF
