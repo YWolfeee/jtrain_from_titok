@@ -69,13 +69,15 @@ accelerate launch \
     model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
     training.per_gpu_batch_size=32 \
-    optimizer.params.learning_rate=2e-4 \
+    optimizer.params.learning_rate=0.0 \
+    training.eval_only=True \
     training.max_train_steps=500_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
     experiment.init_weight='checkpoints/titok_b512_4096_12+titok+p_mean=0.5.bin'
     # experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=0.4+0.6+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
 
+    # optimizer.params.learning_rate=2e-4 \
     # \
     # dataset.params.train_shards_path_or_url='small_datasets/imagenet-train-000000.tar' \
     # dataset.params.eval_shards_path_or_url='small_datasets/imagenet-val-000000.tar' \

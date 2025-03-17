@@ -2,7 +2,9 @@ import numpy as np
 # import matplotlib.py as plt
 import os
 import sys
-root_path = "results_finetune"
+# root_path = "results_finetune"
+root_path = "results_causal"
+# root_path = "temp"
 scripts = sys.argv[1]
 p_mean = sys.argv[2]    
 print(scripts, p_mean)
@@ -11,18 +13,19 @@ print(scripts, p_mean)
 # if p_mean == 0.25:
 # L512 comparison
 # steps = 0
-steps = 240999
+steps = 99999
 file_list = [
-    f"titok_b512_4096_12+method=ours+p_mean={p_mean}+anneal=False+finetune=True",
-    f"titok_b512_4096_12+method=ours+p_mean={p_mean}+anneal=True+finetune=True",
+    # f"titok_b512_4096_12+method=ours+p_mean={p_mean}+anneal=False+finetune=True",
+    # f"titok_b512_4096_12+method=ours+p_mean={p_mean}+anneal=True+finetune=True",
     f"titok_b512_4096_12+method=ours+p_mean={p_mean}+anneal=False+finetune=False",
     f"titok_b512_4096_12+method=ours+p_mean={p_mean}+anneal=True+finetune=False",
+    # "new_cluster_check_px_annealing_from0.5_mean=0.4"
 ]
 
 print(f"steps = {steps}")
 
 baseline_rate = float(p_mean)
-baseline_recon = 1.871828
+baseline_recon = 1.918
 mode="-eval"
 
 for name in file_list:
@@ -71,13 +74,14 @@ for name in file_list:
         # print(f"beta={0.0:1f}, rate_loss={rate_loss.mean():4f}, rate_std={rate_loss.std():4f}, recon={selections.mean():4f}")
         
 
-        for beta in np.arange(0, 10, 0.1):
+        for beta in np.arange(0, 10, 0.01):
             total = recon_error + beta * rate_error[None]
             indices = total.argmin(axis=1)
             rate_loss = 1 - indices / N
             selections = recon_error[np.arange(recon_error.shape[0]), 
                                     indices]
             # print(rate_loss.shape, selections.shape)
-            if np.abs(rate_loss.mean() - baseline_rate) < 0.005 or \
-                np.abs(selections.mean() - baseline_recon) < 0.01:
+            if np.abs(rate_loss.mean() - baseline_rate) < 0.001 or \
+                np.abs(selections.mean() - baseline_recon) < 0.001:
+            # if np.abs(selections.mean() - baseline_recon) < 0.01:
                 print(f"beta={beta:1f}, rate_loss={rate_loss.mean():4f}, rate_std={rate_loss.std():4f}, recon={selections.mean():4f}")

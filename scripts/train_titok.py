@@ -172,6 +172,12 @@ def main():
                 f"Finishing training: Global step is >= Max train steps: {global_step} >= {config.training.max_train_steps}"
             )
             break
+        
+        if config.training.get("eval_only", False):
+            accelerator.print(
+                f"Evalation only mode. Eval after the first round."
+            )
+            return 
 
     accelerator.wait_for_everyone()
     # Save checkpoint at the end of training.
