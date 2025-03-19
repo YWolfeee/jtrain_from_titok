@@ -452,7 +452,6 @@ class PolicyNet(nn.Module):
                 gaussian_smoothing=None, 
                 annealing_factor=1.0,
                 gaussian_sampling_sigma=1.0,
-                use_pairwise: bool=False,
                 vae_results: dict = None, # For pre-get NLL to constrain the mask rate
         ):
         # DEBUG: print parameter norm of logit_head
@@ -465,30 +464,32 @@ class PolicyNet(nn.Module):
                 elbo = vae_results['elbo'] / vae_results['elbo_avg']
 
             mask_rate = 1 - self.elbo.mean * elbo
-            mode = self.elbo.get("elbo_mode", "px")
+            mode = self.elbo.elbo_mode # remove implicit mode
+
             if mode == "px":
                 mask_rate = mask_rate
             elif mode == 'titok':
                 mask_rate = 1 - self.elbo.mean * torch.ones_like(mask_rate)
             elif mode == "elastic":
                 mask_rate = torch.rand_like(mask_rate)
-            elif mode == "0.4+0.6":
-                mask_rate = torch.where(mask_rate < 0.5, 0.4, 0.6)
-            elif mode == "upto_px":
-                r = torch.rand_like(mask_rate)
-                mask_rate += (1 - mask_rate) * r
-            elif mode == "downto_px":
-                mask_rate *= torch.rand_like(mask_rate)
-            elif mode == "0.1_in_px":
-                r = (torch.rand_like(mask_rate) - 0.5) / 0.5 * 0.1
-                mask_rate += r
-            elif mode == "0.1_in_0.5":
-                mask_rate = (torch.rand_like(mask_rate) - 0.5) / 5 + 0.5
-            elif mode == "anneal_to_px":
-                start = 1 - self.elbo.start_mean
-                end = mask_rate
-                mask_rate = annealing_factor * end + (1-annealing_factor) * start
-                
+            # elif mode == "0.4+0.6":
+            #     mask_rate = torch.where(mask_rate < 0.5, 0.4, 0.6)
+            # elif mode == "upto_px":
+            #     r = torch.rand_like(mask_rate)
+            #     mask_rate += (1 - mask_rate) * r
+            # elif mode == "downto_px":
+            #     mask_rate *= torch.rand_like(mask_rate)
+            # elif mode == "0.1_in_px":
+            #     r = (torch.rand_like(mask_rate) - 0.5) / 0.5 * 0.1
+            #     mask_rate += r
+            # elif mode == "0.1_in_0.5":
+            #     mask_rate = (torch.rand_like(mask_rate) - 0.5) / 5 + 0.5
+            else:
+                raise NotImplementedError("Unrecognized elbo_mode value.")
+
+            # anneal with annealing_factor, globally
+            mask_rate = annealing_factor * mask_rate + (1-annealing_factor) * (1 - self.elbo.start_mean)
+
             mask_rate = mask_rate.clip(self.elbo.get('lower', 0.0), 
                                        self.elbo.get('upper', 1.0))
             
@@ -537,11 +538,6 @@ class PolicyNet(nn.Module):
             # assert self.logit_head_type == "categorical_256", "Gaussian smoothing is only supported for categorical_256"
             logits = apply_gaussian_smoothing(logits, gaussian_smoothing.kernel_size, gaussian_smoothing.sigma)
         
-        if use_pairwise:
-            # before sampling, we double the logits
-            # in this case subsequent logits are consistent
-            logits = torch.concat([logits, logits])
-
         # Use [Gumbel Softmax] or [Sampling w/ REINFORCE]
         if gumbel_softmax is not None: # We don't do reinforce
             # assert (

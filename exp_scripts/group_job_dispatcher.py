@@ -23,7 +23,7 @@ except:
 
 print(f"config_name={config_name}, batch_size={batch_size}, lr={lr}, method={method}, output_root={output_root}, wandb_projects={wandb_projects}, init_weight={init_weight}")
 
-os.makedirs(output_root, exist_ok=True)
+os.makedirs(os.path.join(output_root, "logs"), exist_ok=True)
 
 # if method == "ours":
 #     assert int(n_nodes) == 1
@@ -71,6 +71,19 @@ elif method =="baseline":
             f.write("\n")
             command = f"srun --nodes=1 --ntasks=1 --cpus-per-task=64 --mem-per-gpu=72G --gpus=8 --exclusive --container-mounts=$mount_from:$mount_to --container-image=$container_path /bin/bash $mount_to/jtrain_from_titok/{main_file} {config_name} {batch_size} {lr} True True {p_mean} {anneal} {start_mean} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} > logs/{job_name}.log 2>&1 &"
             f.write(command + "\n")
+
+elif method == "all":
+    for elbo_mode in ['px', 'titok', 'elastic']:
+        for p_mean in [0.5, 0.25,]:
+            for anneal in [True, False]:
+                for causal in [True, False]:
+                    job_name = f"{config_name}+method={elbo_mode}+p_mean={p_mean}+anneal={anneal}+causal={causal}"
+                    this_weight = ""
+
+                    f.write("\n")
+                    command = f"srun --nodes=1 --ntasks=1 --cpus-per-task=64 --mem-per-gpu=72G --gpus=8 --exclusive --container-mounts=$mount_from:$mount_to --container-image=$container_path /bin/bash $mount_to/jtrain_from_titok/{main_file} {config_name} {batch_size} {lr} True True {p_mean} {anneal} {causal} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} > {output_root}/logs/{job_name}.log 2>&1 &"
+                    f.write(command + "\n")
+                    f.write("sleep 0.5\n")
 
 
 

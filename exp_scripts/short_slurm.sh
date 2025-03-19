@@ -13,9 +13,9 @@ cd /joint_training/jtrain_from_titok
 pwd
 source ~/.bashrc
 
-config_name="titok_b512_4096_12"
+config_name="titok_s128_4096_12"
 model_type="transformer"
-tag="new_cluster_check_px_annealing_from0.5_mean=0.4"
+tag="bug-elastic0.5+anneal+causal+everything+8gpu"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -24,8 +24,8 @@ accelerate launch \
     --num_machines=1 --num_processes=${ngpus} --machine_rank=$SLURM_NODEID \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
-    experiment.project="TEMP_QY" \
-    experiment.name="${config_name}_${tag}" \
+    experiment.project="temp" \
+    experiment.name="${tag}" \
     experiment.output_dir="temp/${tag}" \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
@@ -63,21 +63,21 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
-    model.reconstruction_regularization.policy.elbo.elbo_mode="anneal_to_px" \
+    model.reconstruction_regularization.policy.elbo.elbo_mode="elastic" \
     model.reconstruction_regularization.policy.elbo.start_mean=0.5 \
-    model.reconstruction_regularization.policy.elbo.mean=0.4 \
+    model.reconstruction_regularization.policy.elbo.mean=0.5 \
     model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
     training.per_gpu_batch_size=32 \
-    optimizer.params.learning_rate=0.0 \
-    training.eval_only=True \
+    optimizer.params.learning_rate=2e-4 \
     training.max_train_steps=500_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
     dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
-    experiment.init_weight='checkpoints/titok_b512_4096_12+titok+p_mean=0.5.bin'
+    model.reconstruction_regularization.use_encoder_mask=True
+    
+    # experiment.init_weight='checkpoints/titok_b512_4096_12+titok+p_mean=0.5.bin'
     # experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=0.4+0.6+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
 
-    # optimizer.params.learning_rate=2e-4 \
     # \
     # dataset.params.train_shards_path_or_url='small_datasets/imagenet-train-000000.tar' \
     # dataset.params.eval_shards_path_or_url='small_datasets/imagenet-val-000000.tar' \

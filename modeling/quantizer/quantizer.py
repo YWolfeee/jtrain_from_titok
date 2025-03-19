@@ -65,14 +65,20 @@ class VectorQuantizer(torch.nn.Module):
         batch_size, _, seq_len, _ = z.shape
         keep_tokens = torch.floor(seq_len * (1 - mask_rate)).long().to(z.device)
         mask = torch.arange(seq_len, device=z.device)[None] < keep_tokens[:, None]  # [B, seq_len]
-        mask = mask.unsqueeze(1).unsqueeze(-1)  # [B, 1, seq_len, 1]
-        mask = mask.to(z.device, z.dtype)
 
-        # Apply mask during loss computation
-        masked_diff_commitment = (z_quantized.detach() - z) * mask
-        masked_diff_codebook = (z_quantized - z.detach()) * mask
-        commitment_loss = self.commitment_cost * torch.sum(masked_diff_commitment ** 2) / mask.sum()
-        codebook_loss = torch.sum(masked_diff_codebook ** 2) / mask.sum()
+        # slightly biased here, but it's fine
+        weight = mask / mask.sum()
+        weight = weight.unsqueeze(1).unsqueeze(-1)  # [B, 1, seq_len, 1]
+        weight = weight.to(z.device, z.dtype)
+
+        '''
+        Original implementation
+        '''
+        # Since weight is normalized, we sum over the tokens, and the rest is averaged.
+        avg = lambda x: (x * weight).sum() / x.shape[-1]  # divide an additional 12
+
+        commitment_loss = self.commitment_cost * avg((z_quantized.detach() - z) **2)
+        codebook_loss = avg((z_quantized - z.detach()) **2)
 
         loss = commitment_loss + codebook_loss
 

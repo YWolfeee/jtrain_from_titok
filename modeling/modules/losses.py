@@ -73,24 +73,13 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
         self.rate_weight = config.model.reconstruction_regularization.policy.rate_weight
         self.target_codebook_size = 1024
 
-        # Pairwise training for REINFORCE
-        try:
-            self.use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
-        except:
-            self.use_pairwise = False
 
         try:
             self.use_gumbel_softmax = config.model.reconstruction_regularization.use_gumbel_softmax
         except:
             self.use_gumbel_softmax = False
         
-        assert (not self.use_pairwise) or (not self.use_gumbel_softmax), \
-            "use_pairwise and use_gumbel_softmax can not both be True."
-
         self.loss_fn = nn.CrossEntropyLoss(reduction="none")
-        if self.use_pairwise:
-            # prepare for pairwise computation
-            self.vmap_fn = torch.vmap(self.loss_fn, (0, None)) 
 
     def forward(self,
                 target_codes: torch.Tensor,
@@ -107,11 +96,8 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                            mode: str = "with_ground_truth"
                            ) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
         reconstructions = reconstructions.contiguous()
-        if mode == "with_policy" or mode == "with_policy_eval":
+        if mode == "with_policy":
             batch_size = reconstructions.shape[0]
-
-            if self.use_pairwise and mode != "with_policy_eval":
-                target_codes = torch.concat([target_codes, target_codes]) 
 
             reconstruction_loss = self.loss_fn(
                 reconstructions.view(batch_size, self.target_codebook_size, -1),
@@ -122,12 +108,6 @@ class ReconstructionLoss_Stage1(torch.nn.Module):
                
             if self.config.model.reconstruction_regularization.use_gumbel_softmax: # The reinforce framework
                 actor_loss = torch.zeros_like(critic_loss)
-            elif self.use_pairwise and mode != "with_policy_eval":
-                critic_loss1, critic_loss2 = critic_loss.chunk(2)
-                logprob1, logprob2 = extra_input_dict["logprob_mask"].chunk(2)
-
-                reward = (critic_loss1 - critic_loss2).detach()
-                actor_loss = reward * torch.clip(logprob1 - logprob2, -10, 10)
 
             else:
                 reward = critic_loss.detach()

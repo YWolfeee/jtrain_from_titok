@@ -14,7 +14,7 @@ use_reconstruction_regularization=$4 # True
 use_ours=$5
 p_mean=$6
 use_anneal=$7
-start_mean=$8
+use_encoder_mask=$8
 output_root=$9
 job_name=${10}         # Use as output dir
 elbo_mode=${11}
@@ -68,7 +68,7 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.use_encoder_mask=True \
+    model.reconstruction_regularization.use_encoder_mask=${use_encoder_mask} \
     model.reconstruction_regularization.policy.annealing.use_annealing=${use_anneal} \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=0.5 \
@@ -83,7 +83,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
     model.reconstruction_regularization.policy.elbo.elbo_mode=${elbo_mode} \
     model.reconstruction_regularization.policy.elbo.mean=${p_mean} \
-    model.reconstruction_regularization.policy.elbo.start_mean=${start_mean} \
+    model.reconstruction_regularization.policy.elbo.start_mean=${p_mean} \
     model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
     \

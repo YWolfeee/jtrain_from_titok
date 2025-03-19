@@ -143,11 +143,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         except:
             self.gumbel_softmax = None
 
-        # Pairwise training for REINFORCE
-        try:
-            self.use_pairwise = self.config.model.reconstruction_regularization.policy.use_pairwise
-        except:
-            self.use_pairwise = False
 
         # Policy annealing on Actor & Critic
         try:
@@ -187,11 +182,12 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         self.apply(self._init_weights)
 
         try:
-            self.use_encoder_mask = config.model.reconstruction_regularizaion.use_encoder_mask
+            self.use_encoder_mask = config.model.reconstruction_regularization.use_encoder_mask
+            print(f"\033[91mself.use_encoder_mask is {self.use_encoder_mask}\033[0m")
         except:
             self.use_encoder_mask = False
-        self.encoder_mask = self.create_encoder_attn_mask()
-
+            print("\033[91mself.use_encoder_mask is False\033[0m")
+        
         if self.quantize_mode == "vq":
             self.quantize = VectorQuantizer(
                 codebook_size=config.model.vq_model.codebook_size,
@@ -368,12 +364,9 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
     
     def create_encoder_attn_mask(self):
         full_seq_len = 1 + self.num_of_image_tokens + self.num_of_latent_tokens
-        if self.use_encoder_mask:
-            attn_mask = torch.tril(torch.ones(full_seq_len, full_seq_len, dtype=torch.bool))
-            attn_mask[:self.num_of_image_tokens, :self.num_of_image_tokens] = True
-        else:
-            attn_mask = None
-        return attn_mask
+        attn_mask = torch.tril(torch.ones(full_seq_len, full_seq_len, dtype=torch.bool))
+        attn_mask[:self.num_of_image_tokens, :self.num_of_image_tokens] = True
+        return ~attn_mask
 
     def encode(self, x, token_features: torch.Tensor, fixed_mask_rate: torch.Tensor = None, vae_results: dict = None):
         # Get key padding mask: if fixed mask rate is provided, use it; otherwise, use policy net to get mask rate
@@ -383,8 +376,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
             encode_mask_rate = fixed_mask_rate
         elif self.use_policy: # For training and general evaluation
             # in some cases, pairwise will be used
-            use_pairwise = self.use_pairwise and self.training
-            x = torch.concat([x, x]) if use_pairwise else x
             output_dict = self.policy_net(
                 token_features, 
                 temperature=self.softmax_temperature, 
@@ -392,7 +383,6 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 gaussian_smoothing=self.gaussian_smoothing,
                 gaussian_sampling_sigma=self.gaussian_sampling_sigma,
                 annealing_factor=self.annealing_factor,
-                use_pairwise=use_pairwise,
                 vae_results=vae_results
             )
             key_padding_mask = self.create_key_padding_mask(output_dict["sampled_mask_rate"]).to(x.device)
@@ -400,6 +390,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
         else:
             raise ValueError("Either fixed_mask_rate or policy_net must be provided")
 
+        encoder_mask = self.create_encoder_attn_mask().to(x.device) if self.use_encoder_mask else None
         if self.finetune_decoder:
             with torch.no_grad():  
                 self.encoder.eval()
@@ -408,7 +399,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                     pixel_values=x, 
                     latent_tokens=self.latent_tokens,
                     key_padding_mask=key_padding_mask,
-                    attn_mask=self.encoder_mask
+                    attn_mask=encoder_mask
                 )
                 z_quantized, result_dict = self.quantize(z, mask_rate=encode_mask_rate)
                 result_dict["quantizer_loss"] *= 0
@@ -420,7 +411,7 @@ class TiTok(BaseModel, PyTorchModelHubMixin, tags=["arxiv:2406.07550", "image-to
                 pixel_values=x, 
                 latent_tokens=self.latent_tokens,
                 key_padding_mask=key_padding_mask,
-                attn_mask=self.encoder_mask
+                attn_mask=encoder_mask
             )
             if self.quantize_mode == "vq":
                 z_quantized, result_dict = self.quantize(z, mask_rate=encode_mask_rate)

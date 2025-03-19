@@ -3,7 +3,7 @@
 # per_gpu_batch_size=32
 # learning_rate=2e-4
 # method="ours"
-output_root="results_causal"
+# output_root="results_causal"
 # wandb_projects="temp"
 # init_weight="results_try_new_design/titok_b512_4096_12+elbo_mode=+nll_only=0.5+rate_weight=1+elbo_lower=0.5+elbo_upper=0.5/checkpoint-250000/unwrapped_model/pytorch_model.bin"
 
@@ -21,9 +21,15 @@ output_root="results_causal"
 
 
 #### python exp_scripts/group_job_dispatcher.py titok_b512_4096_12.yaml 32 2e-4 ours results_causal try_results_causal exp_scripts/for_long_slurm_ours_b512_causal.sh
-job_name="4N@tokenizer_training@ours_b512_start_mean=0.5+causal+nodes=4@P_p1"
-call_file="exp_scripts/for_long_slurm_ours_b512_causal.sh"
-nodes=4
+# job_name="4N@tokenizer_training@ours_b512_start_mean=0.5+causal+nodes=4@P_p1"
+# call_file="exp_scripts/for_long_slurm_ours_b512_causal.sh"
+# nodes=4
+
+#### python exp_scripts/group_job_dispatcher.py titok_b512_4096_12 32 2e-4 all results_ablation results_ablation exp_scripts/for_long_slurm_all_b512_ablate.sh
+output_root="results_ablation"
+job_name="24N@tokenizer_training@all_b512_ablate+nodes=24@P_p1"
+call_file="exp_scripts/for_long_slurm_all_b512_ablate.sh"
+nodes=24
 
 
 command="sbatch --job-name=${job_name} --output=${output_root}/${job_name}/logs/slurm_%j.out --nodes=${nodes} exp_scripts/long_slurm_group.sh $call_file $output_root "

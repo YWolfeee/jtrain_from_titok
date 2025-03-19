@@ -183,7 +183,7 @@ def create_model_and_loss_module(config, logger, accelerator,
             input_size = (1, 3, config.dataset.preprocessing.crop_size, config.dataset.preprocessing.crop_size)
             model_summary_str = summary(model, input_size=input_size, depth=5,
             col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"))
-            logger.info(model_summary_str)
+            # logger.info(model_summary_str)
         elif model_type in ["maskgit", "rar"]:
             input_size = (1, config.model.vq_model.num_latent_tokens)
             input_data = [
@@ -193,7 +193,7 @@ def create_model_and_loss_module(config, logger, accelerator,
             model_summary_str = summary(
                 model, input_data=input_data, depth=7,
                 col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"))
-            logger.info(model_summary_str)
+            # logger.info(model_summary_str)
         else:
             raise NotImplementedError
 
@@ -274,7 +274,7 @@ def create_lr_scheduler(config, logger, accelerator, optimizer, discriminator_op
     return lr_scheduler, discriminator_lr_scheduler
 
 
-def create_dataloader(config, logger, accelerator, return_dataset=True):
+def create_dataloader(config, logger, accelerator, return_dataset=False):
     """Creates data loader for training and testing."""
     logger.info("Creating dataloaders.")
     total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
@@ -302,11 +302,10 @@ def create_dataloader(config, logger, accelerator, return_dataset=True):
     )
     
     if return_dataset:
-        train_dataset, eval_dataset, train_eval_dataset = dataset.train_dataset, dataset.eval_dataset, dataset.train_eval_dataset
-        return train_dataset, eval_dataset, train_eval_dataset
+        train_dataset, eval_dataset = dataset.train_dataset, dataset.eval_dataset
+        return train_dataset, eval_dataset
     
     train_dataloader, eval_dataloader = dataset.train_dataloader, dataset.eval_dataloader
-    train_eval_dataloader = dataset.train_eval_dataloader
     
     # potentially, use a pretokenized dataset for speed-up.
     if dataset_config.get("pretokenization", ""):
@@ -317,7 +316,7 @@ def create_dataloader(config, logger, accelerator, return_dataset=True):
         train_dataloader.num_batches = math.ceil(
             config.experiment.max_train_examples / total_batch_size_without_accum)
     
-    return train_dataloader, eval_dataloader, train_eval_dataloader
+    return train_dataloader, eval_dataloader
 
 
 def create_evaluator(config, logger, accelerator):
@@ -369,7 +368,7 @@ def train_one_epoch(config, logger, accelerator,
                     model, ema_model, loss_module,
                     optimizer, discriminator_optimizer,
                     lr_scheduler, discriminator_lr_scheduler,
-                    train_dataloader, eval_dataloader, train_eval_dataloader,
+                    train_dataloader, eval_dataloader,
                     evaluators,
                     global_step,
                     pretrained_tokenizer=None):
@@ -382,13 +381,9 @@ def train_one_epoch(config, logger, accelerator,
 
     autoencoder_logs = defaultdict(float)
     discriminator_logs = defaultdict(float)
-    batch = next(iter(train_eval_dataloader))
-    log_images = batch["image"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
-    log_images = log_images[:config.training.num_generated_images]
-    log_dino_input = batch["dino_input"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
-    log_dino_input = log_dino_input[:config.training.num_generated_images]
-    log_fnames = batch["__key__"][:config.training.num_generated_images]
-    log_vae_results = {k: v[:config.training.num_generated_images].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) for k, v in batch["vae_results"].items()}
+
+    logger.info(f"Start a new epoch. Global step: {global_step}")
+    logger.info(f"Number of batches: {train_dataloader.num_batches}, samples: {train_dataloader.num_samples}")
     for i, batch in enumerate(train_dataloader):
         model.train()
         if "image" in batch:
@@ -442,19 +437,16 @@ def train_one_epoch(config, logger, accelerator,
                     global_step,
                     mode="generator",
                 )
-            elif config.model.reconstruction_regularization.use_policy:
-                autoencoder_loss, loss_dict = loss_module(
-                    proxy_codes,
-                    reconstructed_images,
-                    extra_results_dict,
-                    mode="with_policy"
-                )
             else:
+                if config.model.reconstruction_regularization.use_policy:
+                    mode = 'with_policy'
+                else:
+                    mode = 'with_ground_truth'
                 autoencoder_loss, loss_dict = loss_module(
                     proxy_codes,
                     reconstructed_images,
                     extra_results_dict,
-                    mode="with_ground_truth"
+                    mode=mode,
                 )
 
             # Gather the losses across all processes for logging.
@@ -527,6 +519,7 @@ def train_one_epoch(config, logger, accelerator,
                 discriminator_optimizer.zero_grad(set_to_none=True)
 
         if accelerator.sync_gradients:
+            # update ema model if required
             if config.training.use_ema:
                 ema_model.step(model.parameters())
             batch_time_meter.update(time.time() - end)
@@ -575,110 +568,99 @@ def train_one_epoch(config, logger, accelerator,
                 # Wait for everyone to save their checkpoint.
                 accelerator.wait_for_everyone()
 
-            # Generate images.
-            if (global_step + 1) % config.experiment.generate_every == 0 and accelerator.is_main_process:
+            # trigger global eval runs: save images, compute eval loss,
+            # store arrays, and compute metrics on the validation set.
+            if (global_step + 1) % config.experiment.eval_every == 0: 
                 # Store the model parameters temporarily and load the EMA parameters to perform inference.
                 if config.training.get("use_ema", False):
                     ema_model.store(model.parameters())
                     ema_model.copy_to(model.parameters())
 
-                reconstruct_images(
+                model.eval()
+
+                # only generate images for the first process
+                if accelerator.is_main_process:
+                    batch = next(iter(eval_dataloader))
+                    log_images = batch["image"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
+                    log_dino_input = batch["dino_input"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
+                    log_fnames = batch["__key__"]
+                    log_vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) for k, v in batch["vae_results"].items()}
+                    reconstruct_images(
+                        model,
+                        log_images,
+                        log_dino_input,
+                        log_vae_results,
+                        log_fnames,
+                        accelerator,
+                        global_step + 1,
+                        config.experiment.output_dir,
+                        logger=logger,
+                        config=config,
+                        pretrained_tokenizer=pretrained_tokenizer
+                    )
+                
+                accelerator.wait_for_everyone()
+
+                mode = 'eval'
+                eval_loss_dict, recon_matrix, policy_recon_arr, policy_rate_arr = eval_loss(
                     model,
-                    log_images,
-                    log_dino_input,
-                    log_vae_results,
-                    log_fnames,
+                    eval_dataloader,
                     accelerator,
-                    global_step + 1,
-                    config.experiment.output_dir,
-                    logger=logger,
-                    config=config,
+                    loss_module,
                     pretrained_tokenizer=pretrained_tokenizer
                 )
+                # logger.info(pprint.pformat(eval_loss_dict))
+                eval_loss_log = {f'{mode}_loss/'+k: v for k, v in eval_loss_dict.items()}
+                accelerator.log(eval_loss_log, step=global_step + 1)
+                import numpy as np
+                # save reconstruction error of manually set mask rate
+                recon_matrix = recon_matrix.cpu().numpy()
+                root = Path(config.experiment.output_dir) / "recon_matrix"
+                os.makedirs(root, exist_ok=True)
+                np.save(os.path.join(root, f"recon_matrix-{global_step}-{mode}.npy"), recon_matrix)
+                # save from policy
+                policy_recon_arr = policy_recon_arr.cpu().numpy() # reconstruction loss
+                root = Path(config.experiment.output_dir) / "policy_recon_arr"
+                os.makedirs(root, exist_ok=True)
+                np.save(os.path.join(root, f"policy_recon_arr-{global_step}-{mode}.npy"), policy_recon_arr)
+                policy_rate_arr = policy_rate_arr.cpu().numpy() # rate loss
+                root = Path(config.experiment.output_dir) / "policy_rate_arr"
+                os.makedirs(root, exist_ok=True)
+                np.save(os.path.join(root, f"policy_rate_arr-{global_step}-{mode}.npy"), policy_rate_arr)
+
+                # Do not compute during training
+                '''
+                logger.info("Computing metrics on the validation set.")
+                decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
+                eval_scores = eval_reconstruction(
+                    model,
+                    eval_dataloader,
+                    accelerator,
+                    evaluators,
+                    pretrained_tokenizer=pretrained_tokenizer
+                )
+                for i in range(4):
+                    logger.info(
+                        f"EMA EVALUATION with {(1 - decode_mask_rates[i]) * 100}% tokens"
+                        f"Step: {global_step + 1} "
+                    )
+                    logger.info(
+                        "Compared to ground truth"
+                    )
+                    logger.info(pprint.pformat(eval_scores[i]))
+                    
+                    if accelerator.is_main_process:
+                        eval_log = {f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
+                        accelerator.log(eval_log, step=global_step + 1)
+                        
+                accelerator.wait_for_everyone()
+                '''
+
+                model.train()
 
                 if config.training.get("use_ema", False):
                     # Switch back to the original model parameters for training.
                     ema_model.restore(model.parameters())
-
-            if (global_step + 1) % config.experiment.eval_loss_every == 0 or global_step == 0:
-                logger.info(f"Global step: {global_step + 1}")
-                for mode in ['train', 'eval']:
-                    dataloader = train_dataloader if mode == 'train' else eval_dataloader
-                    eval_loss_dict, recon_matrix, policy_recon_arr, policy_rate_arr = eval_loss(
-                        model,
-                        dataloader,
-                        accelerator,
-                        loss_module,
-                        pretrained_tokenizer=pretrained_tokenizer
-                    )
-                    # logger.info(pprint.pformat(eval_loss_dict))
-                    eval_loss_log = {f'{mode}_loss/'+k: v for k, v in eval_loss_dict.items()}
-                    accelerator.log(eval_loss_log, step=global_step + 1)
-                    import numpy as np
-                    # save reconstruction error of manually set mask rate
-                    recon_matrix = recon_matrix.cpu().numpy()
-                    root = Path(config.experiment.output_dir) / "recon_matrix"
-                    os.makedirs(root, exist_ok=True)
-                    np.save(os.path.join(root, f"recon_matrix-{global_step}-{mode}.npy"), recon_matrix)
-                    # save from policy
-                    policy_recon_arr = policy_recon_arr.cpu().numpy() # reconstruction loss
-                    root = Path(config.experiment.output_dir) / "policy_recon_arr"
-                    os.makedirs(root, exist_ok=True)
-                    np.save(os.path.join(root, f"policy_recon_arr-{global_step}-{mode}.npy"), policy_recon_arr)
-                    policy_rate_arr = policy_rate_arr.cpu().numpy() # rate loss
-                    root = Path(config.experiment.output_dir) / "policy_rate_arr"
-                    os.makedirs(root, exist_ok=True)
-                    np.save(os.path.join(root, f"policy_rate_arr-{global_step}-{mode}.npy"), policy_rate_arr)
-
-            # Evaluate reconstruction.
-            if eval_dataloader is not None and (global_step + 1) % config.experiment.eval_every == 0:
-                logger.info("Computing metrics on the validation set.")
-                if config.training.get("use_ema", False):
-                    ema_model.store(model.parameters())
-                    ema_model.copy_to(model.parameters())
-                    # Eval for EMA.
-                    decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
-                    eval_scores = eval_reconstruction(
-                        model,
-                        eval_dataloader,
-                        accelerator,
-                        evaluators,
-                        pretrained_tokenizer=pretrained_tokenizer
-                    )
-                    for i in range(4):
-                        logger.info(
-                            f"EMA EVALUATION with {(1 - decode_mask_rates[i]) * 100}% tokens"
-                            f"Step: {global_step + 1} "
-                        )
-                        logger.info(
-                            "Compared to ground truth"
-                        )
-                        logger.info(pprint.pformat(eval_scores[i]))
-                        
-                        if accelerator.is_main_process:
-                            eval_log = {f'ema_eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
-                            accelerator.log(eval_log, step=global_step + 1)
-                        
-                    if config.training.get("use_ema", False):
-                        # Switch back to the original model parameters for training.
-                        ema_model.restore(model.parameters())
-                else:
-                    # Eval for non-EMA.
-                    for i in range(4):
-                        logger.info(
-                            f"EVALUATION with {(1 - decode_mask_rates[i]) * 100}% tokens"
-                            f"Step: {global_step + 1} "
-                        )
-                        logger.info(
-                            "Compared to ground truth"
-                        )
-                        logger.info(pprint.pformat(eval_scores[i]))
-                        
-                        if accelerator.is_main_process:
-                            eval_log = {f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
-                            accelerator.log(eval_log, step=global_step + 1)
-
-                accelerator.wait_for_everyone()
 
             global_step += 1
 
@@ -1022,7 +1004,7 @@ def eval_loss(
                     proxy_codes,
                     reconstructed_images,
                     extra_results_dict,
-                    mode="with_policy_eval"
+                    mode="with_policy"
                 )
                 unwrapped_loss_module = loss_module
             
