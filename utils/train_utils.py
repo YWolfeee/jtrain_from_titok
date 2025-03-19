@@ -409,21 +409,11 @@ def train_one_epoch(config, logger, accelerator,
             proxy_codes = None
 
         local_model = accelerator.unwrap_model(model)
-        # QY: Update max mask rate based on annealing schedule if configured
+        # Update max mask rate based on annealing schedule if configured
         if config.model.reconstruction_regularization.use_annealing:
-            max_mask_rate = get_titok_max_mask_rate(config, global_step)
-            local_model.set_max_mask_rate(max_mask_rate)
+            local_model.set_max_mask_rate(global_step, config.training.max_train_steps)
 
         local_model.set_policy_annealing_factor(
-            global_step, config.training.max_train_steps)
-
-        local_model.set_policy_softmax_temperature(
-            global_step, config.training.max_train_steps)
-        
-        local_model.set_gaussian_smoothing(
-            global_step, config.training.max_train_steps)
-
-        local_model.set_gaussian_sampling_sigma(
             global_step, config.training.max_train_steps)
 
         with accelerator.accumulate([model, loss_module]):
@@ -547,8 +537,6 @@ def train_one_epoch(config, logger, accelerator,
                     "lr": lr,
                     "lr/generator": lr,
                     "lr/annealing_factor": accelerator.unwrap_model(model).annealing_factor,
-                    "lr/softmax_temperature": accelerator.unwrap_model(model).softmax_temperature,
-                    "lr/gaussian_sampling_sigma": accelerator.unwrap_model(model).gaussian_sampling_sigma,
                     "samples/sec/gpu": samples_per_second_per_gpu,
                     "time/data_time": data_time_meter.val,
                     "time/batch_time": batch_time_meter.val,
@@ -672,28 +660,6 @@ def train_one_epoch(config, logger, accelerator,
 
 
     return global_step
-
-def get_titok_max_mask_rate(config, global_step):
-    """QY: Get the max mask rate for TiTok model."""
-    annealing = config.model.reconstruction_regularization.annealing
-    is_increasing = annealing.is_increasing
-    time_start = annealing.time_start * config.training.max_train_steps
-    time_end = annealing.time_end * config.training.max_train_steps
-    alpha = (global_step - time_start) / (time_end - time_start)
-    end_mask_rate = config.model.reconstruction_regularization.max_mask_rate if is_increasing else 0.0
-    start_mask_rate = 0.0 if is_increasing else config.model.reconstruction_regularization.max_mask_rate
-    if global_step < time_start:
-        return start_mask_rate
-    elif global_step > time_end:
-        return end_mask_rate
-    else:
-        return alpha * end_mask_rate + (1 - alpha) * start_mask_rate
-    
-# def get_titok_annealing_factor(config, global_step):
-#     annealing = config.model.reconstruction_regularization.policy.annealing
-#     alpha_end = annealing.alpha_end # 1
-#     alpha_start = annealing.alpha_start # 0
-#     return alpha_start + 0.5 * (alpha_end - alpha_start) * (1 + math.cos(math.pi * global_step / config.training.max_train_steps))
 
 def get_rar_random_ratio(config, cur_step):
     randomness_anneal_start = config.model.generator.randomness_anneal_start

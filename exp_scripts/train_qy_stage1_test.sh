@@ -17,19 +17,17 @@ conda activate titok
 export PYTHONPATH=$(pwd)
 export WANDB_INIT_TIMEOUT=300
 
-accelerate launch \
+WANDB_MODE=offline accelerate launch \
     --num_machines=1 --num_processes=2 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
-    experiment.project="TEMP_QY" \
-    experiment.name="${config_name}_${tag}" \
+    experiment.project="temp" \
+    experiment.name="${tag}" \
     experiment.output_dir="temp/${tag}" \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
     model.reconstruction_regularization.max_mask_rate=0.95 \
-    \
-    model.reconstruction_regularization.use_encoder_mask=True \
     \
     model.reconstruction_regularization.use_annealing=False \
     model.reconstruction_regularization.annealing.time_start=0.0 \
@@ -48,9 +46,9 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=False \
-    model.reconstruction_regularization.policy.annealing.alpha_start=0.02 \
-    model.reconstruction_regularization.policy.annealing.alpha_end=1.0 \
+    model.reconstruction_regularization.policy.annealing.use_annealing=True \
+    model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
+    model.reconstruction_regularization.policy.annealing.alpha_end=0.5 \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
     \
@@ -62,11 +60,15 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
+    model.reconstruction_regularization.policy.elbo.elbo_mode="elastic" \
+    model.reconstruction_regularization.policy.elbo.start_mean=0.5 \
     model.reconstruction_regularization.policy.elbo.mean=0.5 \
-    model.reconstruction_regularization.policy.elbo.lower=0.2 \
+    model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
+    model.reconstruction_regularization.use_encoder_mask=True \
+    \
     training.per_gpu_batch_size=32 \
-    optimizer.params.learning_rate=1e-4 \
-    training.max_train_steps=250_000 \
+    optimizer.params.learning_rate=2e-4 \
+    training.max_train_steps=500_000 \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000049}.tar" \
