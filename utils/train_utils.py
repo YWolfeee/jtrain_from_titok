@@ -1011,7 +1011,8 @@ def eval_reconstruction(
     eval_loader,
     accelerator,
     evaluators,
-    pretrained_tokenizer=None
+    pretrained_tokenizer=None,
+    logger=None
 ):
     model.eval()
     # There are totally 4 evalators:
@@ -1026,7 +1027,9 @@ def eval_reconstruction(
     local_model.eval()
     decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
 
-    for batch in eval_loader:
+    for idx, batch in enumerate(eval_loader):
+        if logger is not None and idx % 50 == 0:
+            logger.info(f"Start evaluating batch {idx}")
         images = batch["image"].to(
             accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
         )
@@ -1052,6 +1055,47 @@ def eval_reconstruction(
 
     model.train()
     return [evaluator.result() for evaluator in evaluators]
+
+
+@torch.no_grad()
+def eval_reconstruction_with_policy(
+    model,
+    eval_loader,
+    accelerator,
+    evaluator,
+    pretrained_tokenizer=None,
+    logger=None
+):
+    model.eval()
+    evaluator.reset_metrics()
+    local_model = accelerator.unwrap_model(model)
+    local_model.eval()
+
+    if accelerator.is_main_process:
+        for idx, batch in enumerate(eval_loader):
+            if logger is not None and idx % 10 == 0:
+                logger.info(f"Start evaluating batch {idx}")
+            images = batch["image"].to(
+                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+            )
+            dino_input = batch["dino_input"].to(
+                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+            )
+            vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+                for k, v in batch["vae_results"].items()}
+            original_images = torch.clone(images)
+            original_images = torch.clamp(original_images, 0.0, 1.0)
+            reconstructed_images, model_dict = local_model(images, dino_input=dino_input, vae_results=vae_results)
+            if pretrained_tokenizer is not None:
+                reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+            reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
+            # Quantize to uint8
+            reconstructed_images = torch.round(reconstructed_images * 255.0) / 255.0
+            
+            evaluator.update(original_images, reconstructed_images.squeeze(2), model_dict["min_encoding_indices"])
+    accelerator.wait_for_everyone()
+
+    return evaluator.result()
 
 
 @torch.no_grad()

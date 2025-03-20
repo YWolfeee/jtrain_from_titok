@@ -537,7 +537,6 @@ class TiTok(
 
         # QY: If dino_input is not provided, use the original image to form the DINO input
         if dino_input is None:
-            print("\033[91mCHECK Not recommended settings: dino_input is None\033[0m")
             dino_input = torch.nn.functional.interpolate(
                 images, size=(224, 224), mode="bilinear", align_corners=False
             )
@@ -547,12 +546,12 @@ class TiTok(
             token_features = self.feature_extractor(dino_input).last_hidden_state
         if self.use_policy and not use_fixed_mask_rate:
             # Use policy net to estimate the mask rate
-            z_quantized, encode_dict = self.encode(
+            _, encode_dict = self.encode(
                 images, token_features, vae_results=vae_results
             )
         else:
             forward_mask_rate = self.get_mask_rate(images, fixed_mask_rate_val)
-            z_quantized, encode_dict = self.encode(
+            _, encode_dict = self.encode(
                 images, token_features, forward_mask_rate
             )
         full_tokens = encode_dict["min_encoding_indices"].reshape(images.shape[0], -1)
@@ -641,7 +640,6 @@ class TiTok(
 
         # QY: If dino_input is not provided, use the original image to form the DINO input
         if dino_input is None:
-            print("\033[91mCHECK Not recommended settings: dino_input is None\033[0m")
             dino_input = torch.nn.functional.interpolate(
                 x, size=(224, 224), mode="bilinear", align_corners=False
             )

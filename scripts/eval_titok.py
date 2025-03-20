@@ -20,6 +20,7 @@ Reference:
 import math
 import os
 from pathlib import Path
+import pprint
 
 from accelerate.utils import set_seed
 from accelerate import Accelerator
@@ -31,9 +32,9 @@ from utils.logger import setup_logger
 from utils.train_utils import (
     get_config, create_pretrained_tokenizer, 
     create_model_and_loss_module,
-    create_optimizer, create_lr_scheduler, create_dataloader,
-    create_evaluator, auto_resume, save_checkpoint, 
-    train_one_epoch)
+    create_dataloader,
+    create_evaluator, auto_resume,
+    eval_reconstruction_with_policy)
 
 
 def main():
@@ -67,10 +68,8 @@ def main():
     )
 
     logger = setup_logger(name="TiTok", log_level="INFO",
-     output_file=f"{output_dir}/log{accelerator.process_index}.txt")
+        output_file=f"{output_dir}/log{accelerator.process_index}.txt")
 
-    # We need to initialize the trackers we use, and also store our configuration.
-    # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
         accelerator.init_trackers(
             project_name=config.experiment.project,
@@ -107,91 +106,49 @@ def main():
     model, ema_model, loss_module = create_model_and_loss_module(
         config, logger, accelerator, model_type="titok")
 
-    optimizer, discriminator_optimizer = create_optimizer(config, logger, model, loss_module)
-
-    lr_scheduler, discriminator_lr_scheduler = create_lr_scheduler(
-        config, logger, accelerator, optimizer, discriminator_optimizer)
-
-    train_dataloader, eval_dataloader = create_dataloader(config, logger, accelerator)
+    _, eval_dataloader = create_dataloader(config, logger, accelerator)
 
     # Set up evaluator.
-    evaluators = []
-    for i in range(4):
-        evaluator = create_evaluator(config, logger, accelerator)
-        evaluators.append(evaluator)
+    evaluator = create_evaluator(config, logger, accelerator)
 
     # Prepare everything with accelerator.
-    logger.info("Preparing model, optimizer and dataloaders")
-    # The dataloader are already aware of distributed training, so we don't need to prepare them.
-    if config.model.vq_model.finetune_decoder:
-        model, loss_module, optimizer, discriminator_optimizer, lr_scheduler, discriminator_lr_scheduler = accelerator.prepare(
-            model, loss_module, optimizer, discriminator_optimizer, lr_scheduler, discriminator_lr_scheduler
-        )
-    else:
-        model, optimizer, lr_scheduler = accelerator.prepare(
-            model, optimizer, lr_scheduler
-        )
+    logger.info("Preparing model and dataloaders")
+    model, loss_module = accelerator.prepare(model, loss_module)
     if config.training.use_ema:
         ema_model.to(accelerator.device)
+    model.to(accelerator.device)
 
-    total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
-    num_batches = math.ceil(
-        config.experiment.max_train_examples / total_batch_size_without_accum)
-    num_update_steps_per_epoch = math.ceil(num_batches / config.training.gradient_accumulation_steps)
-    num_train_epochs = math.ceil(config.training.max_train_steps / num_update_steps_per_epoch)
-
-    # Start training.
-    logger.info("***** Running training *****")
-    logger.info(f"  Num training steps = {config.training.max_train_steps}")
-    logger.info(f"  Gradient Accumulation steps = {config.training.gradient_accumulation_steps}")
+    # Start Evaluation
+    logger.info("***** Running Evaluation *****")
     logger.info(f"  Instantaneous batch size per gpu = { config.training.per_gpu_batch_size}")
-    logger.info(f"""  Total train batch size (w. parallel, distributed & accumulation) = {(
-        config.training.per_gpu_batch_size *
-        accelerator.num_processes *
-        config.training.gradient_accumulation_steps)}""")
-    global_step = 0
-    first_epoch = 0
 
-    global_step, first_epoch = auto_resume(
-        config, logger, accelerator, ema_model, num_update_steps_per_epoch,
-        strict=True)
-
-    for current_epoch in range(first_epoch, num_train_epochs):
-        accelerator.print(f"Epoch {current_epoch}/{num_train_epochs-1} started.")
-        global_step = train_one_epoch(config, logger, accelerator,
-                            model, ema_model, loss_module,
-                            optimizer, discriminator_optimizer,
-                            lr_scheduler, discriminator_lr_scheduler,
-                            train_dataloader, eval_dataloader, evaluators,
-                            global_step,
-                            pretrained_tokenizer=pretrained_tokenizer)
-        # Stop training if max steps is reached.
-        if global_step >= config.training.max_train_steps:
-            accelerator.print(
-                f"Finishing training: Global step is >= Max train steps: {global_step} >= {config.training.max_train_steps}"
-            )
-            break
-        
-        if config.training.get("eval_only", False):
-            accelerator.print(
-                f"Evalation only mode. Eval after the first round."
-            )
-            return 
+    logger.info("Computing metrics on the validation set.")
+    eval_score = eval_reconstruction_with_policy(
+        model,
+        eval_dataloader,
+        accelerator,
+        evaluator,
+        pretrained_tokenizer=pretrained_tokenizer,
+        logger=logger
+    )
+    logger.info(
+        f"EMA EVALUATION"
+    )
+    logger.info(
+        "Compared to ground truth"
+    )
+    logger.info(pprint.pformat(eval_score))
+    
+    if accelerator.is_main_process:
+        eval_log = {f'eval_policy_determined_tokens_vs_ground_truth/'+k: v for k, v in eval_score.items()}
+        accelerator.log(eval_log)
 
     accelerator.wait_for_everyone()
-    # Save checkpoint at the end of training.
-    save_checkpoint(model, output_dir, accelerator, global_step, logger=logger)
-    # Save the final trained checkpoint
-    if accelerator.is_main_process:
-        model = accelerator.unwrap_model(model)
-        if config.training.use_ema:
-            ema_model.copy_to(model.parameters())
-        model.save_pretrained_weight(output_dir)
+    
     # mark as done for this running
     with open(os.path.join(output_dir, "done.txt"), "w") as f:
         f.write("\n")
     accelerator.end_training()
-
 
 if __name__ == "__main__":
     main()

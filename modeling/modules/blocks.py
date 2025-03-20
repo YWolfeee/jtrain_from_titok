@@ -414,19 +414,11 @@ class PolicyNet(nn.Module):
             self.num_heads = config.model.reconstruction_regularization.policy.num_heads
             self.num_layers = num_layers
             self.positional_embedding = nn.Parameter(torch.randn(1, self.num_tokens, self.in_channels))
-            # encoder_layer = nn.TransformerEncoderLayer(
-            #     d_model=self.in_channels,
-            #     nhead=self.num_heads,
-            #     dim_feedforward=int(self.in_channels * mlp_ratio),
-            #     activation="gelu",
-            #     batch_first=True,
-            # )
-            # self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=self.num_layers)
             self.ln_pre = nn.LayerNorm(self.in_channels)
             self.transformer = nn.ModuleList()
             for i in range(self.num_layers):
                 self.transformer.append(ResidualAttentionBlock(
-                    self.in_channels, self.num_heads, mlp_ratio=4.0
+                    self.in_channels, self.num_heads, mlp_ratio=mlp_ratio
                 ))
             self.ln_post = nn.LayerNorm(self.in_channels)
         
@@ -447,15 +439,11 @@ class PolicyNet(nn.Module):
 
     def forward(self, 
                 token_features: torch.Tensor, 
-                temperature=1.0, 
-                gumbel_softmax=None, 
-                gaussian_smoothing=None, 
+                temperature=1.0,
                 annealing_factor=1.0,
                 gaussian_sampling_sigma=1.0,
                 vae_results: dict = None, # For pre-get NLL to constrain the mask rate
         ):
-        # DEBUG: print parameter norm of logit_head
-        # print("\033[91mCHECK parameter norm of logit_head", self.logit_head.weight.norm(), "\033[0m")
         if self.elbo and self.elbo.nll_only:   
             if vae_results is None:
                 elbo =  torch.ones((token_features.shape[0],)).to(
@@ -472,18 +460,6 @@ class PolicyNet(nn.Module):
                 mask_rate = 1 - self.elbo.mean * torch.ones_like(mask_rate)
             elif mode == "elastic":
                 mask_rate = torch.rand_like(mask_rate)
-            # elif mode == "0.4+0.6":
-            #     mask_rate = torch.where(mask_rate < 0.5, 0.4, 0.6)
-            # elif mode == "upto_px":
-            #     r = torch.rand_like(mask_rate)
-            #     mask_rate += (1 - mask_rate) * r
-            # elif mode == "downto_px":
-            #     mask_rate *= torch.rand_like(mask_rate)
-            # elif mode == "0.1_in_px":
-            #     r = (torch.rand_like(mask_rate) - 0.5) / 0.5 * 0.1
-            #     mask_rate += r
-            # elif mode == "0.1_in_0.5":
-            #     mask_rate = (torch.rand_like(mask_rate) - 0.5) / 5 + 0.5
             else:
                 raise NotImplementedError("Unrecognized elbo_mode value.")
 
@@ -505,8 +481,6 @@ class PolicyNet(nn.Module):
             logits = self.logit_head(x)
 
         elif self.model_type == "transformer":
-            # DEBUG: print("\033[91mCHECK token_features.shape", token_features.shape, "\033[0m")
-            # DEBUG: print("\033[91mCHECK self.positional_embedding.shape", self.positional_embedding.shape, "\033[0m")
             token_features = token_features + self.positional_embedding
             token_features = self.ln_pre(token_features)
             token_features = token_features.permute(1, 0, 2)
@@ -533,56 +507,12 @@ class PolicyNet(nn.Module):
         else:
             raise ValueError(f"Invalid model type: {self.model_type}")
         
-        # Gaussian smoothing
-        if gaussian_smoothing is not None:
-            # assert self.logit_head_type == "categorical_256", "Gaussian smoothing is only supported for categorical_256"
-            logits = apply_gaussian_smoothing(logits, gaussian_smoothing.kernel_size, gaussian_smoothing.sigma)
-        
-        # Use [Gumbel Softmax] or [Sampling w/ REINFORCE]
-        if gumbel_softmax is not None: # We don't do reinforce
-            # assert (
-            #     self.logit_head_type == "categorical_256" or 
-            #     self.logit_head_type == "categorical_8"
-            # ), "Gumbel softmax is only supported for categorical_256 and categorical_8"
-            raise NotImplementedError("Gumbel softmax has been deprecated.")
-            logits = annealing_factor * logits + \
-                (1-annealing_factor) * logits.detach()
-            if gumbel_softmax.fix_tau:
-                logits /= temperature
-                temperature = 1.0
-
-            sampled_rate = torch.nn.functional.gumbel_softmax(
-                    logits,
-                    hard=gumbel_softmax.hard,
-                    tau=temperature,
-                    dim=-1)
-            N = sampled_rate.shape[-1]
-            MASK = torch.tril(torch.ones((N, N), device=sampled_rate.device), 
-                              diagonal=0)
-            sampled_rate = sampled_rate @ MASK
-            return {
-                "sampled_mask_rate": sampled_rate,
-                "mask_rate_value": 1 - sampled_rate.mean(dim=-1)
-            }
-
-        elif self.logit_head_type == "categorical_256" or self.logit_head_type == "categorical_8": # Categorical sampling
+        if self.logit_head_type == "categorical_256" or self.logit_head_type == "categorical_8": # Categorical sampling
             logits = logits - torch.mean(logits, dim=-1, keepdim=True)
 
             probs = torch.nn.functional.softmax(logits / temperature, dim=-1) # [B, N]
             samples = torch.multinomial(probs, num_samples=1)[:, 0]
             sampled_prob = probs[torch.arange(samples.shape[0]), samples]
-            # else:
-            #     assert probs.shape[0] % 2 == 0, "batch size must be even for pairwise sampling"
-            #     sampled_num = torch.multinomial(probs[:probs.shape[0]//2], num_samples=2) # shape: (B/2, 2)
-            #     sampled_prob_1 = probs[torch.arange(sampled_num.shape[0]),
-            #                             sampled_num[:, 0]]
-            #     sampled_prob_2 = probs[torch.arange(sampled_num.shape[0]),
-            #                             sampled_num[:, 1]]
-            #     # stack sampled_num and sampled_prob
-            #     sampled_num = torch.cat([sampled_num[:, 0], sampled_num[:, 1]], dim=0)
-            #     sampled_prob = torch.cat([sampled_prob_1, sampled_prob_2], dim=0)
-            #     # DEBUG: print("/033[91mCHECK sampled_num.shape", sampled_num.shape, "\033[0m")
-                # DEBUG: print("/033[91mCHECK sampled_prob.shape", sampled_prob.shape, "\033[0m")
             mask_rate = 1 - (samples + 1) / probs.shape[1] # Resolve 8 categories and 256 categories
 
             return {
@@ -592,27 +522,11 @@ class PolicyNet(nn.Module):
             }
 
         elif self.logit_head_type == "gaussian_1": # Gaussian sampling
-
-            # ### Sample then Normalize
-            # print("\033[91mAlert: Deprecated implementation", "\033[0m")
-            # # Reparameterize and sample from Gaussian distribution with std=temperature
-            # sampled_from_logits = torch.randn_like(logits) * gaussian_sampling_sigma + logits
-            # # Compute the probability of the sampled mask rate based on Gaussian distribution
-            # logprob_mask = torch.exp(
-            #     -0.5 * ((sampled_from_logits - logits) / gaussian_sampling_sigma) ** 2
-            # ) / (gaussian_sampling_sigma * math.sqrt(2 * math.pi))
-            # sampled_rate = torch.sigmoid(sampled_from_logits)[:, 0]
-
-            # ### Use truncated normal distribution
+            # Use truncated normal distribution
             rate_mean = torch.sigmoid(logits)[:, 0]
 
-            # sample_rate = torch.zeros_like(rate_mean)
-            # torch.nn.init.trunc_normal_(sample_rate, rate_mean, gaussian_sampling_sigma, 0, 1)
-
             normal = torch.distributions.Normal(rate_mean, gaussian_sampling_sigma)
-            # print("\033[91mCHECK rate_mean", rate_mean, "\033[0m")
-            # print("\033[91mCHECK gaussian_sampling_sigma", gaussian_sampling_sigma, "\033[0m")
-    
+            
             # Convert bounds to tensors on the same device & dtype as mean.
             a_tensor = torch.tensor(0, dtype=rate_mean.dtype, device=rate_mean.device)
             b_tensor = torch.tensor(1, dtype=rate_mean.dtype, device=rate_mean.device)
@@ -627,10 +541,6 @@ class PolicyNet(nn.Module):
 
             # Use the inverse CDF (icdf) to obtain the sample. We do not want to backprop through this.
             sample_rate = normal.icdf(u_scaled).detach()
-            logprob_mask_check = normal.log_prob(sample_rate)
-            # print("\033[91mCHECK sampled_rate", sampled_rate, "\033[0m")
-            # print("\033[91mCHECK logprob_mask", logprob_mask, "\033[0m")
-
             sampled_mask_rate = 1 - sample_rate    # ratio of masking
 
             # This is the un-normalized log-prob that use for pairwise reinforce
@@ -643,34 +553,5 @@ class PolicyNet(nn.Module):
             }
         else:
             raise ValueError(f"Invalid logit head type: {self.logit_head_type}")
-
-        
-def apply_gaussian_smoothing(logits, kernel_size=64, sigma=5.0):
-    """
-    Apply Gaussian smoothing to a 1D tensor of logits.
-
-    Parameters:
-    logits (torch.Tensor): The input tensor with shape [batch_size, length].
-    kernel_size (int): The size of the Gaussian kernel.
-    sigma (float): The standard deviation of the Gaussian kernel.
-
-    Returns:
-    torch.Tensor: The smoothed logits tensor with the same shape as input.
-    """
-    # Ensure kernel_size is odd to have a symmetric kernel
-    if kernel_size % 2 == 0:
-        raise ValueError("kernel_size must be an odd number.")
-
-    # Create a 1D Gaussian kernel
-    x = torch.arange(kernel_size, dtype=logits.dtype, device=logits.device) - (kernel_size - 1) / 2
-    kernel = torch.exp(-0.5 * (x / sigma) ** 2)
-    kernel = kernel / kernel.sum()
-    kernel = kernel.view(1, 1, -1)
-
-    logits = logits.unsqueeze(1)
-    smoothed_logits = nn.functional.conv1d(logits, kernel, padding=kernel_size // 2)
-    smoothed_logits = smoothed_logits.squeeze(1)
-
-    return smoothed_logits
         
         
