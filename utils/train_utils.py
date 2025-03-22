@@ -622,32 +622,32 @@ def train_one_epoch(config, logger, accelerator,
                 np.save(os.path.join(root, f"policy_rate_arr-{global_step}-{mode}.npy"), policy_rate_arr)
 
                 # Do not compute during training
-                '''
-                logger.info("Computing metrics on the validation set.")
-                decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
-                eval_scores = eval_reconstruction(
-                    model,
-                    eval_dataloader,
-                    accelerator,
-                    evaluators,
-                    pretrained_tokenizer=pretrained_tokenizer
-                )
-                for i in range(4):
-                    logger.info(
-                        f"EMA EVALUATION with {(1 - decode_mask_rates[i]) * 100}% tokens"
-                        f"Step: {global_step + 1} "
+                if (global_step + 1) % (5 * config.experiment.eval_every) == 0: 
+                    logger.info("Computing metrics on the validation set.")
+                    decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
+                    eval_scores = eval_reconstruction(
+                        model,
+                        eval_dataloader,
+                        accelerator,
+                        evaluators,
+                        pretrained_tokenizer=pretrained_tokenizer,
+                        logger=logger
                     )
-                    logger.info(
-                        "Compared to ground truth"
-                    )
-                    logger.info(pprint.pformat(eval_scores[i]))
-                    
-                    if accelerator.is_main_process:
-                        eval_log = {f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
-                        accelerator.log(eval_log, step=global_step + 1)
+                    for i in range(4):
+                        logger.info(
+                            f"EMA EVALUATION with {(1 - decode_mask_rates[i]) * 100}% tokens"
+                            f"Step: {global_step + 1} "
+                        )
+                        logger.info(
+                            "Compared to ground truth"
+                        )
+                        logger.info(pprint.pformat(eval_scores[i]))
                         
+                        if accelerator.is_main_process:
+                            eval_log = {f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
+                            accelerator.log(eval_log, step=global_step + 1)
+                            
                 accelerator.wait_for_everyone()
-                '''
 
                 model.train()
 
