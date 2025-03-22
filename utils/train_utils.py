@@ -29,7 +29,7 @@ from torch.utils.data import DataLoader
 from omegaconf import OmegaConf
 from torch.optim import AdamW
 from utils.lr_schedulers import get_scheduler
-from modeling.modules import EMAModel, ReconstructionLoss_Stage1, ReconstructionLoss_Stage2, MLMLoss, ARLoss
+from modeling.modules import EMAModel, ReconstructionLoss_Stage1, ReconstructionLoss_Stage2, MLMLoss, ARLoss, FlowMatchingLoss_Stage1
 from modeling.titok import TiTok, PretrainedTokenizer
 from modeling.maskgit import ImageBert, UViTBert
 from modeling.rar import RAR
@@ -123,7 +123,12 @@ def create_model_and_loss_module(config, logger, accelerator,
     logger.info("Creating model and loss module.")
     if model_type == "titok":
         model_cls = TiTok
-        loss_cls = ReconstructionLoss_Stage2 if config.model.vq_model.finetune_decoder else ReconstructionLoss_Stage1
+        if config.model.vq_model.get("from_continuous", False):
+            loss_cls = FlowMatchingLoss_Stage1
+        elif config.model.vq_model.finetune_decoder:
+            loss_cls = ReconstructionLoss_Stage2
+        else:
+            loss_cls = ReconstructionLoss_Stage1
     elif model_type == "maskgit":
         if config.model.generator.model_type == "ViT":
             model_cls = ImageBert
@@ -1042,16 +1047,20 @@ def eval_reconstruction(
         original_images = torch.clone(images)
         original_images = torch.clamp(original_images, 0.0, 1.0)
         for fixed_mask_rate_val in decode_mask_rates:
-            reconstructed_images, model_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
-            if pretrained_tokenizer is not None:
-                reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
-            reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
+            if local_model.from_continuous:
+                reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results, to_pixel=True)
+                reconstructed_images = (reconstructed_images * 0.5 + 0.5).clamp(0, 1) # [-1-ep, 1+ep] -> [0, 1]
+            else:
+                reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, fixed_mask_rate_val=fixed_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
+                if pretrained_tokenizer is not None:
+                    reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+                reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
             # Quantize to uint8
             reconstructed_images = torch.round(reconstructed_images * 255.0) / 255.0
             images_lists.append(reconstructed_images)
         
         for i in range(4):
-            evaluators[i].update(original_images, images_lists[i].squeeze(2), model_dict["min_encoding_indices"])
+            evaluators[i].update(original_images, images_lists[i].squeeze(2), extra_results_dict["min_encoding_indices"])
 
     model.train()
     return [evaluator.result() for evaluator in evaluators]
@@ -1085,14 +1094,18 @@ def eval_reconstruction_with_policy(
                 for k, v in batch["vae_results"].items()}
             original_images = torch.clone(images)
             original_images = torch.clamp(original_images, 0.0, 1.0)
-            reconstructed_images, model_dict = local_model(images, dino_input=dino_input, vae_results=vae_results)
-            if pretrained_tokenizer is not None:
-                reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
-            reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
+            if local_model.from_continuous:
+                reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, vae_results=vae_results, to_pixel=True)
+                reconstructed_images = (reconstructed_images * 0.5 + 0.5).clamp(0, 1) # [-1-ep, 1+ep] -> [0, 1]
+            else:
+                reconstructed_images, extra_results_dict = local_model(images, dino_input=dino_input, vae_results=vae_results)
+                if pretrained_tokenizer is not None:
+                    reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+                reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
             # Quantize to uint8
             reconstructed_images = torch.round(reconstructed_images * 255.0) / 255.0
             
-            evaluator.update(original_images, reconstructed_images.squeeze(2), model_dict["min_encoding_indices"])
+            evaluator.update(original_images, reconstructed_images.squeeze(2), extra_results_dict["min_encoding_indices"])
     accelerator.wait_for_everyone()
 
     return evaluator.result()
@@ -1120,16 +1133,26 @@ def reconstruct_images(model, original_images, dino_input, vae_results, fnames, 
     mask_rate_list = [i / 16 for i in range(17)]
     for decode_mask_rate_val in mask_rate_list:
         with torch.autocast("cuda", dtype=dtype, enabled=accelerator.mixed_precision != "no"):
-            reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
-        if pretrained_tokenizer is not None:
-            reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+            if local_model.from_continuous:
+                reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results, to_pixel=True)
+                reconstructed_images = (reconstructed_images * 0.5 + 0.5).clamp(0, 1) # [-1-ep, 1+ep] -> [0, 1]
+            else:
+                reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
+                if pretrained_tokenizer is not None:
+                    reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+                reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
         reconstructed_images_list.append(reconstructed_images)
 
     vis_dict = {}
     if local_model.use_policy:
-        reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, vae_results=vae_results)
-        if pretrained_tokenizer is not None:
-            reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+        if local_model.from_continuous:
+            reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, vae_results=vae_results, to_pixel=True)
+            reconstructed_images = (reconstructed_images * 0.5 + 0.5).clamp(0, 1) # [-1-ep, 1+ep] -> [0, 1]
+        else:
+            reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, vae_results=vae_results)
+            if pretrained_tokenizer is not None:
+                reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+            reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
         reconstructed_images_list.append(reconstructed_images)
         policy_mask_rate = extra_results_dict["mask_rate_value"]
         vis_dict["policy_mask_rate"] = policy_mask_rate

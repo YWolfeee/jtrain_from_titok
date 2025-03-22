@@ -1,42 +1,38 @@
-#PBS -N zexp_flextok_test
-#PBS -S /bin/bash
-#PBS -l select=1:ncpus=8:mem=90gb:ngpus=2:host=cvml05
+#!/bin/bash
 
-config_name='titok_b128_4096_12'
-model_type="transformer"
-logit_head_type="gaussian_1"
-rate_weight=0
-mode=px
-if [ "$mode" = "px" ]; then
-    port=9999
-elif [ "$mode" = "elastic" ]; then
-    port=9980
-else
-    port=9990
-fi
-tag="try_stage1_from_discrete_${mode}"
+#SBATCH --account=dir_cosmos_misc
+#SBATCH --partition=batch
+#SBATCH --container-mounts=/project/cosmos/haotiany/joint_training/:/joint_training
+#SBATCH --container-image=/project/cosmos/haotiany/docker_images/imaginaire4_v9.2.2.sqsh
+#SBATCH --gpus-per-node=8
+#SBATCH --nodes=1
+#SBATCH --time=4:00:00
 
-nvidia-smi
-cd ~/jtrain_from_titok
+# nvidia-smi
+cd /joint_training/jtrain_from_titok
+pwd
 source ~/.bashrc
-eval "$(conda shell.bash hook)"
-conda activate titok
 
+config_name="titok_s128_4096_12"
+model_type="transformer"
+tag="bug-elastic0.5+anneal+causal+everything+8gpu"
+ngpus=8
 export PYTHONPATH=$(pwd)
-export WANDB_INIT_TIMEOUT=300
 
+# python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
 accelerate launch \
-    --num_machines=1 --num_processes=2 --machine_rank=0 \
-    --main_process_ip=127.0.0.1 --main_process_port=${port} --same_network \
+    --num_machines=1 --num_processes=${ngpus} --machine_rank=$SLURM_NODEID \
+    --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="temp" \
     experiment.name="${tag}" \
     experiment.output_dir="temp/${tag}" \
-    \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
     model.reconstruction_regularization.mask_ratio_method='hierarchical' \
     model.reconstruction_regularization.max_mask_rate=0.95 \
+    \
+    model.vq_model.from_continuous=True \
     \
     model.reconstruction_regularization.use_annealing=False \
     model.reconstruction_regularization.annealing.time_start=0.0 \
@@ -61,16 +57,30 @@ accelerate launch \
     model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
     \
+    model.reconstruction_regularization.policy.temperature.use_T=False \
+    model.reconstruction_regularization.policy.temperature.T0=10000 \
+    model.reconstruction_regularization.policy.temperature.alpha=1e-4 \
+    \
+    model.reconstruction_regularization.policy.gaussian_smoothing.use_gaussian_smoothing=False \
+    model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
+    \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
-    model.reconstruction_regularization.policy.elbo.elbo_mode="${mode}" \
+    model.reconstruction_regularization.policy.elbo.elbo_mode="elastic" \
     model.reconstruction_regularization.policy.elbo.start_mean=0.5 \
     model.reconstruction_regularization.policy.elbo.mean=0.5 \
     model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
-    model.reconstruction_regularization.use_encoder_mask=True \
-    \
-    training.per_gpu_batch_size=64 \
-    optimizer.params.learning_rate=2e-4 \
+    training.per_gpu_batch_size=32 \
+    optimizer.params.learning_rate=5.62e-4 \
+    lr_scheduler.params.warmup_steps=3814 \
     training.max_train_steps=500_000 \
-    dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \
-    dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000049}.tar" \
+    dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
+    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
+    model.reconstruction_regularization.use_encoder_mask=True
+    
+    # experiment.init_weight='checkpoints/titok_b512_4096_12+titok+p_mean=0.5.bin'
+    # experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=0.4+0.6+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'
+
+    # \
+    # dataset.params.train_shards_path_or_url='small_datasets/imagenet-train-000000.tar' \
+    # dataset.params.eval_shards_path_or_url='small_datasets/imagenet-val-000000.tar' \

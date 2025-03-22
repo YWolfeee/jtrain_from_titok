@@ -1,12 +1,12 @@
 #PBS -N zexp_flextok_test
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=8:mem=90gb:ngpus=2:host=cvml05
+#PBS -l select=1:ncpus=8:mem=90gb:ngpus=2:host=cvml11
 
 config_name='titok_b128_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
 rate_weight=0
-mode=px
+mode=elastic
 if [ "$mode" = "px" ]; then
     port=9999
 elif [ "$mode" = "elastic" ]; then
@@ -14,7 +14,7 @@ elif [ "$mode" = "elastic" ]; then
 else
     port=9990
 fi
-tag="try_stage1_from_discrete_${mode}"
+tag="try_stage1_flow_repa_correct_${mode}"
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -32,6 +32,9 @@ accelerate launch \
     experiment.project="temp" \
     experiment.name="${tag}" \
     experiment.output_dir="temp/${tag}" \
+    experiment.eval_every=1000 \
+    \
+    model.vq_model.from_continuous=True \
     \
     model.use_reconstruction_regularization=True \
     model.reconstruction_regularization.name='matryoshka' \
@@ -58,7 +61,7 @@ accelerate launch \
     model.reconstruction_regularization.policy.annealing.use_annealing=True \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=0.5 \
-    model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
+    model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-large" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
@@ -70,7 +73,8 @@ accelerate launch \
     model.reconstruction_regularization.use_encoder_mask=True \
     \
     training.per_gpu_batch_size=64 \
-    optimizer.params.learning_rate=2e-4 \
+    optimizer.params.learning_rate=5.62e-4 \
+    lr_scheduler.params.warmup_steps=3814 \
     training.max_train_steps=500_000 \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000049}.tar" \
