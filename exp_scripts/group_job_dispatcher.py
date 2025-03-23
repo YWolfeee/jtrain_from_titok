@@ -86,7 +86,7 @@ elif method == "all":
                     f.write("sleep 0.5\n")
 
 elif method == 'continuous':
-    for elbo_mode in ['px', 'titok', 'elastic', 'flex']:
+    for elbo_mode in ['px', 'titok', 'elastic', 'flextok']:
         for anneal in [True, False]:
             for causal in [True, False]:
                 job_name = f"CONTINUOUS+{config_name}+method={elbo_mode}+anneal={anneal}+causal={causal}"

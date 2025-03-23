@@ -210,7 +210,7 @@ class TiTok(
         )
         if self.use_policy:
             # 1024: hidden size of dinov2-large; 257: number of tokens of an image + cls_tokens
-            self.policy_net = PolicyNet(config, 1024, 257)
+            self.policy_net = PolicyNet(config, 1024, self.num_latent_tokens)
         try:
             tmp = config.model.reconstruction_regularization.policy.annealing
             self.policy_annealing = tmp if tmp.use_annealing else None

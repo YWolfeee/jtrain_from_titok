@@ -377,7 +377,7 @@ def train_one_epoch(config, logger, accelerator,
                     optimizer, discriminator_optimizer,
                     lr_scheduler, discriminator_lr_scheduler,
                     train_dataloader, eval_dataloader,
-                    evaluators,
+                    evaluator,
                     global_step,
                     pretrained_tokenizer=None):
     """One epoch training."""
@@ -576,7 +576,12 @@ def train_one_epoch(config, logger, accelerator,
 
                 # only generate images for the first process
                 if accelerator.is_main_process:
+                    MAX_SAVE = 32
                     batch = next(iter(eval_dataloader))
+                    func = lambda dic: {k: v[:MAX_SAVE] if not isinstance(v, dict) else func(v) for k, v in dic.items()}
+
+                    batch = func(batch)
+                    
                     log_images = batch["image"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE)
                     log_dino_input = batch["dino_input"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE)
                     log_fnames = batch["__key__"]
@@ -610,45 +615,35 @@ def train_one_epoch(config, logger, accelerator,
                 accelerator.log(eval_loss_log, step=global_step + 1)
                 import numpy as np
                 # save reconstruction error of manually set mask rate
-                recon_matrix = recon_matrix.cpu().numpy()
-                root = Path(config.experiment.output_dir) / "recon_matrix"
-                os.makedirs(root, exist_ok=True)
-                np.save(os.path.join(root, f"recon_matrix-{global_step}-{mode}.npy"), recon_matrix)
-                # save from policy
-                policy_recon_arr = policy_recon_arr.cpu().numpy() # reconstruction loss
-                root = Path(config.experiment.output_dir) / "policy_recon_arr"
-                os.makedirs(root, exist_ok=True)
-                np.save(os.path.join(root, f"policy_recon_arr-{global_step}-{mode}.npy"), policy_recon_arr)
-                policy_rate_arr = policy_rate_arr.cpu().numpy() # rate loss
-                root = Path(config.experiment.output_dir) / "policy_rate_arr"
-                os.makedirs(root, exist_ok=True)
-                np.save(os.path.join(root, f"policy_rate_arr-{global_step}-{mode}.npy"), policy_rate_arr)
+                save_arr_dict = {
+                    'recon_matrix': recon_matrix,
+                    'policy_recon_arr': policy_recon_arr,
+                    'policy_rate_arr': policy_rate_arr
+                }
+                for k, v in save_arr_dict.items():
+                    root = Path(config.experiment.output_dir) / k
+                    os.makedirs(root, exist_ok=True)
+                    np.save(os.path.join(root, f"{k}-{global_step}-{mode}.npy"), v.cpu().numpy())
 
                 # Do not compute during training
-                if (global_step + 1) % (5 * config.experiment.eval_every) == 0: 
+                if (global_step + 1) % (config.experiment.eval_every) == 0: 
                     logger.info("Computing metrics on the validation set.")
-                    decode_mask_rates = [0.0, 0.25, 0.5, 0.75]
-                    eval_scores = eval_reconstruction(
+                    
+                    eval_score = eval_reconstruction_with_policy(
                         model,
                         eval_dataloader,
                         accelerator,
-                        evaluators,
+                        evaluator,
                         pretrained_tokenizer=pretrained_tokenizer,
                         logger=logger
                     )
-                    for i in range(4):
-                        logger.info(
-                            f"EMA EVALUATION with {(1 - decode_mask_rates[i]) * 100}% tokens"
-                            f"Step: {global_step + 1} "
-                        )
-                        logger.info(
-                            "Compared to ground truth"
-                        )
-                        logger.info(pprint.pformat(eval_scores[i]))
-                        
-                        if accelerator.is_main_process:
-                            eval_log = {f'eval_{(1 - decode_mask_rates[i]) * 100}%_tokens_vs_ground_truth/'+k: v for k, v in eval_scores[i].items()}
-                            accelerator.log(eval_log, step=global_step + 1)
+                    logger.info(f"EMA EVALUATION")
+                    logger.info("Compared to ground truth")
+                    logger.info(pprint.pformat(eval_score))
+                    
+                    if accelerator.is_main_process:
+                        eval_log = {f'eval_policy_determined_tokens_vs_ground_truth/'+k: v for k, v in eval_score.items()}
+                        accelerator.log(eval_log)
                             
                 accelerator.wait_for_everyone()
 

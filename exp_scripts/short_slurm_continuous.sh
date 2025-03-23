@@ -13,11 +13,16 @@ cd /joint_training/jtrain_from_titok
 pwd
 source ~/.bashrc
 
-config_name="titok_b256_4096_12"
+pip install torchinfo diffusers
+
+config_name="titok_s128_4096_12"
 model_type="transformer"
-tag="test_from_continuous+px_causal+8gpu+b512"
+tag="test_from_continuous+save"
 ngpus=8
 export PYTHONPATH=$(pwd)
+export HF_HOME=$(pwd)/huggingface
+
+echo $HF_HOME
 
 # python -m debugpy --listen 0.0.0.0:5678 --wait-for-client \
 accelerate launch \
@@ -51,7 +56,7 @@ accelerate launch \
     model.reconstruction_regularization.gumbel_softmax.hard=True \
     model.reconstruction_regularization.gumbel_softmax.fix_tau=False \
     \
-    model.reconstruction_regularization.policy.annealing.use_annealing=True \
+    model.reconstruction_regularization.policy.annealing.use_annealing=False \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=0.5 \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
@@ -70,12 +75,12 @@ accelerate launch \
     model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
     training.per_gpu_batch_size=128 \
-    optimizer.params.learning_rate=5.62e-4 \
-    lr_scheduler.params.warmup_steps=3814 \
-    training.max_train_steps=500_000 \
+    optimizer.params.learning_rate=2e-4 \
+    training.max_train_steps=200_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
-    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
-    model.reconstruction_regularization.use_encoder_mask=True
+    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000003}.tar' \
+    model.reconstruction_regularization.use_encoder_mask=True \
+    experiment.eval_every=1000 \
     
     # experiment.init_weight='checkpoints/titok_b512_4096_12+titok+p_mean=0.5.bin'
     # experiment.init_weight='results_try_new_design/titok_b512_4096_12+elbo_mode=0.4+0.6+nll_only=0.5+rate_weight=1+elbo_lower=0.0+elbo_upper=1.0/checkpoint-90000/unwrapped_model/pytorch_model.bin'

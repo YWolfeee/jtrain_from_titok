@@ -24,10 +24,12 @@ init_weight=${13}
 ngpus=8
 
 source ~/.bashrc
-pip install torchinfo
+pip install torchinfo diffusers
 which accelerate
 cd /joint_training/jtrain_from_titok
 export PYTHONPATH='/joint_training/jtrain_from_titok'
+export HF_HOME=$(pwd)/huggingface
+
 
 
 # if awk "BEGIN {exit !($alpha_start > 1)}"; then
@@ -90,9 +92,9 @@ accelerate launch \
     \
     training.per_gpu_batch_size=${per_gpu_batch_size} \
     optimizer.params.learning_rate=${lr} \
-    training.max_train_steps=500_000 \
+    training.max_train_steps=200_000 \
     dataset.params.train_shards_path_or_url='datasets/imagenet-train-{000000..000252}.tar' \
-    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000049}.tar' \
+    dataset.params.eval_shards_path_or_url='datasets/imagenet-val-{000000..000003}.tar' \
     experiment.init_weight=${init_weight}
 
     

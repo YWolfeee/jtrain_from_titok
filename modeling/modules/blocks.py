@@ -842,15 +842,22 @@ class PolicyNet(nn.Module):
             mask_rate = 1 - self.elbo.mean * elbo
             mode = self.elbo.elbo_mode  # remove implicit mode
 
+            assert self.elbo.mean == 0.5, "current code does not implement logis beyond mean==0.5."
             if mode == "px":
                 mask_rate = mask_rate
             elif mode == "titok":
                 mask_rate = 1 - self.elbo.mean * torch.ones_like(mask_rate)
             elif mode == "elastic":
-                mask_rate = 1 - (torch.rand_like(mask_rate) * 15/16 + 1/16)
+                mini_val = 1 / 16
+                mask_rate = (1 - mini_val) * (torch.rand_like(mask_rate))
             elif mode == "flextok":
-                candidates = torch.tensor([2**i/256 for i in range(9)], device=mask_rate.device)
-                mask_rate = 1 - candidates[torch.randint(0, 9, (mask_rate.shape[0],), device=mask_rate.device)]
+                # generate all possible 2**i not larger than self.num_tokens
+                total_length = int(math.log2(self.num_tokens)) + 1
+                candidates = torch.tensor(
+                    [2 ** i/self.num_tokens for i in range(total_length)]
+                ).to(mask_rate.device)
+                mask_rate = 1 - candidates[torch.randint_like(
+                    mask_rate, 0, total_length).int()]
             else:
                 raise NotImplementedError("Unrecognized elbo_mode value.")
 

@@ -32,6 +32,13 @@ call_file="exp_scripts/for_long_slurm_all_b512_ablate.sh"
 nodes=24
 
 
+#### CONTINUOUS
+#### python exp_scripts/group_job_dispatcher.py titok_b256_4096_12 128 2e-4 continuous results_ablation results_ablation exp_scripts/for_long_slurm_all_b512_continuous.sh
+output_root="results_ablation"
+job_name="24N@tokenizer_training@all_b512_ablate+nodes=24@P_p1"
+call_file="exp_scripts/for_long_slurm_all_b512_continuous.sh"
+nodes=24
+
 command="sbatch --job-name=${job_name} --output=${output_root}/${job_name}/logs/slurm_%j.out --nodes=${nodes} exp_scripts/long_slurm_group.sh $call_file $output_root "
 echo $command
 eval $command
