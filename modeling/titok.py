@@ -174,7 +174,7 @@ class TiTok(
                 self.config.model.vq_model, "num_inference_steps", 25
             )
             self.guidance_scale = getattr(
-                self.config.model.vq_model, "guidance_scale", 5.0
+                self.config.model.vq_model, "guidance_scale", 1.8
             )
             self.scheduler = FlowMatchEulerDiscreteScheduler(
                 num_train_timesteps=1000,
