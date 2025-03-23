@@ -626,7 +626,7 @@ def train_one_epoch(config, logger, accelerator,
                     np.save(os.path.join(root, f"{k}-{global_step}-{mode}.npy"), v.cpu().numpy())
 
                 # Do not compute during training
-                if (global_step + 1) % (config.experiment.eval_every) == 0: 
+                if (global_step + 1) % (5 * config.experiment.eval_every) == 0: 
                     logger.info("Computing metrics on the validation set.")
                     
                     eval_score = eval_reconstruction_with_policy(
