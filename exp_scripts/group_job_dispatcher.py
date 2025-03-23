@@ -85,6 +85,19 @@ elif method == "all":
                     f.write(command + "\n")
                     f.write("sleep 0.5\n")
 
+elif method == 'continuous':
+    for elbo_mode in ['px', 'titok', 'elastic', 'flex']:
+        for anneal in [True, False]:
+            for causal in [True, False]:
+                job_name = f"CONTINUOUS+{config_name}+method={elbo_mode}+anneal={anneal}+causal={causal}"
+                this_weight = ""
+
+                f.write("\n")
+                command = f"srun --nodes=1 --ntasks=1 --cpus-per-task=64 --mem-per-gpu=72G --gpus=8 --exclusive --container-mounts=$mount_from:$mount_to --container-image=$container_path /bin/bash $mount_to/jtrain_from_titok/{main_file} {config_name} {batch_size} {lr} True True 0.5 {anneal} {causal} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} > {output_root}/logs/{job_name}.log 2>&1 &"
+                f.write(command + "\n")
+                f.write("sleep 0.5\n")
+        
+
 
 
 f.write("wait\n")
