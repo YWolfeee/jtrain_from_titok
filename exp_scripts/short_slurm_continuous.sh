@@ -13,9 +13,9 @@ cd /joint_training/jtrain_from_titok
 pwd
 source ~/.bashrc
 
-config_name="titok_s128_4096_12"
+config_name="titok_b256_4096_12"
 model_type="transformer"
-tag="bug-elastic0.5+anneal+causal+everything+8gpu"
+tag="test_from_continuous+px_causal+8gpu+b512"
 ngpus=8
 export PYTHONPATH=$(pwd)
 
@@ -54,7 +54,6 @@ accelerate launch \
     model.reconstruction_regularization.policy.annealing.use_annealing=True \
     model.reconstruction_regularization.policy.annealing.alpha_start=0.0 \
     model.reconstruction_regularization.policy.annealing.alpha_end=0.5 \
-    model.reconstruction_regularization.policy.feature_extractor_name="facebook/dinov2-base" \
     model.reconstruction_regularization.policy.logit_head_type="gaussian_1" \
     \
     model.reconstruction_regularization.policy.temperature.use_T=False \
@@ -65,12 +64,12 @@ accelerate launch \
     model.reconstruction_regularization.policy.gaussian_smoothing.kernel_size=65 \
     \
     model.reconstruction_regularization.policy.elbo.nll_only=True \
-    model.reconstruction_regularization.policy.elbo.elbo_mode="elastic" \
+    model.reconstruction_regularization.policy.elbo.elbo_mode="px" \
     model.reconstruction_regularization.policy.elbo.start_mean=0.5 \
     model.reconstruction_regularization.policy.elbo.mean=0.5 \
     model.reconstruction_regularization.policy.elbo.lower=0.0 \
     model.reconstruction_regularization.policy.elbo.upper=1.0 \
-    training.per_gpu_batch_size=32 \
+    training.per_gpu_batch_size=128 \
     optimizer.params.learning_rate=5.62e-4 \
     lr_scheduler.params.warmup_steps=3814 \
     training.max_train_steps=500_000 \

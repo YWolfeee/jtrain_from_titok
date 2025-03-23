@@ -39,6 +39,8 @@ from demo_util import get_titok_tokenizer, sample_fn
 from utils.viz_utils import make_viz_from_samples, make_viz_from_samples_generation
 from torchinfo import summary
 
+TORCH_DTYPE = torch.bfloat16
+
 
 def get_config():
     """Reads configs from a yaml file and terminal."""
@@ -81,6 +83,7 @@ def create_pretrained_tokenizer(config, accelerator=None):
         pretrained_tokenizer = PretrainedTokenizer(config.model.vq_model.pretrained_tokenizer_weight)
         if accelerator is not None:
             pretrained_tokenizer.to(accelerator.device)
+        pretrained_tokenizer.to(dtype=TORCH_DTYPE)
     return pretrained_tokenizer
 
 
@@ -186,8 +189,8 @@ def create_model_and_loss_module(config, logger, accelerator,
     if accelerator.is_main_process:
         if model_type in ["titok"]:
             input_size = (1, 3, config.dataset.preprocessing.crop_size, config.dataset.preprocessing.crop_size)
-            model_summary_str = summary(model, input_size=input_size, depth=5,
-            col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"))
+            # model_summary_str = summary(model, input_size=input_size, depth=5,
+            # col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"), dtypes=[TORCH_DTYPE])
             # logger.info(model_summary_str)
         elif model_type in ["maskgit", "rar"]:
             input_size = (1, config.model.vq_model.num_latent_tokens)
@@ -195,9 +198,9 @@ def create_model_and_loss_module(config, logger, accelerator,
                 torch.randint(0, config.model.vq_model.codebook_size, input_size),
                 torch.ones(1, dtype=int)
             ]
-            model_summary_str = summary(
-                model, input_data=input_data, depth=7,
-                col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"))
+            # model_summary_str = summary(
+            #     model, input_data=input_data, depth=7,
+            #     col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"))
             # logger.info(model_summary_str)
         else:
             raise NotImplementedError
@@ -393,13 +396,13 @@ def train_one_epoch(config, logger, accelerator,
         model.train()
         if "image" in batch:
             images = batch["image"].to(
-                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE
             )
             dino_input = batch["dino_input"].to(
-                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE
             )
             # fnames = batch["__key__"] # Seems not used
-            vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+            vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE) 
                for k, v in batch["vae_results"].items()}
         else:
             raise ValueError(f"Not found valid keys: {batch.keys()}")
@@ -574,10 +577,10 @@ def train_one_epoch(config, logger, accelerator,
                 # only generate images for the first process
                 if accelerator.is_main_process:
                     batch = next(iter(eval_dataloader))
-                    log_images = batch["image"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
-                    log_dino_input = batch["dino_input"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True)
+                    log_images = batch["image"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE)
+                    log_dino_input = batch["dino_input"].to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE)
                     log_fnames = batch["__key__"]
-                    log_vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) for k, v in batch["vae_results"].items()}
+                    log_vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE) for k, v in batch["vae_results"].items()}
                     reconstruct_images(
                         model,
                         log_images,
@@ -897,12 +900,12 @@ def eval_loss(
         if t >= sampled_batches:
             break
         images = batch["image"].to(
-            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE
         )
         dino_input = batch["dino_input"].to(
-            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE
         )
-        vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+        vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE) 
                for k, v in batch["vae_results"].items()}
         if pretrained_tokenizer is not None:
             pretrained_tokenizer.eval()
@@ -1036,12 +1039,12 @@ def eval_reconstruction(
         if logger is not None and idx % 50 == 0:
             logger.info(f"Start evaluating batch {idx}")
         images = batch["image"].to(
-            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE
         )
         dino_input = batch["dino_input"].to(
-            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+            accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE
         )
-        vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+        vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE) 
                for k, v in batch["vae_results"].items()}
         images_lists = []
         original_images = torch.clone(images)
@@ -1085,12 +1088,12 @@ def eval_reconstruction_with_policy(
             if logger is not None and idx % 10 == 0:
                 logger.info(f"Start evaluating batch {idx}")
             images = batch["image"].to(
-                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE
             )
             dino_input = batch["dino_input"].to(
-                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True
+                accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE
             )
-            vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True) 
+            vae_results = {k: v.to(accelerator.device, memory_format=torch.contiguous_format, non_blocking=True, dtype=TORCH_DTYPE) 
                 for k, v in batch["vae_results"].items()}
             original_images = torch.clone(images)
             original_images = torch.clamp(original_images, 0.0, 1.0)

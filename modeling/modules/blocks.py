@@ -143,10 +143,10 @@ class TimestepEmbedder(nn.Module):
         half = dim // 2
         freqs = torch.exp(
             -math.log(max_period)
-            * torch.arange(start=0, end=half, dtype=torch.float32)
+            * torch.arange(start=0, end=half, dtype=t.dtype)
             / half
         ).to(device=t.device)
-        args = t[:, None].float() * freqs[None]
+        args = t[:, None] * freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
             embedding = torch.cat(
@@ -847,7 +847,10 @@ class PolicyNet(nn.Module):
             elif mode == "titok":
                 mask_rate = 1 - self.elbo.mean * torch.ones_like(mask_rate)
             elif mode == "elastic":
-                mask_rate = torch.rand_like(mask_rate)
+                mask_rate = 1 - (torch.rand_like(mask_rate) * 15/16 + 1/16)
+            elif mode == "flextok":
+                candidates = torch.tensor([2**i/256 for i in range(9)], device=mask_rate.device)
+                mask_rate = 1 - candidates[torch.randint(0, 9, (mask_rate.shape[0],), device=mask_rate.device)]
             else:
                 raise NotImplementedError("Unrecognized elbo_mode value.")
 

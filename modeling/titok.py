@@ -35,6 +35,8 @@ from transformers import AutoModel
 from diffusers import AutoencoderKL
 from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
 
+TORCH_DTYPE=torch.bfloat16
+
 
 class PretrainedTokenizer(nn.Module):
     def __init__(self, pretrained_weight):
@@ -237,6 +239,7 @@ class TiTok(
             "facebook/dinov2-large",
         )
         self.feature_extractor = AutoModel.from_pretrained(self.feature_extractor_name)
+        self.feature_extractor = self.feature_extractor.to(dtype=TORCH_DTYPE)
         self.feature_extractor.eval()
         self.feature_extractor.requires_grad_(
             False
@@ -247,7 +250,7 @@ class TiTok(
             self.vae = AutoencoderKL.from_pretrained(
                 "black-forest-labs/FLUX.1-schnell",
                 subfolder="vae",
-                torch_dtype=torch.float32,
+                torch_dtype=TORCH_DTYPE,
             )
             self.vae.eval()
             self.vae.requires_grad_(False)
@@ -593,7 +596,7 @@ class TiTok(
         self, 
         timesteps: torch.Tensor, 
         n_dim: int = 4, 
-        dtype: torch.dtype = torch.float32
+        dtype: torch.dtype = TORCH_DTYPE
     ) -> torch.Tensor:
         """Retrieves sigma values corresponding to given timesteps from the scheduler.
         
@@ -603,7 +606,7 @@ class TiTok(
         Args:
             timesteps: A tensor containing timestep values, (B,)
             n_dim: The number of dimensions for the output sigma tensor. Defaults to 4 because the vae latent is [B, 16, 32, 32]
-            dtype: The data type for the sigma values. Defaults to torch.float32.
+            dtype: The data type for the sigma values. Defaults to TORCH_DTYPE.
             
         Returns:
             A tensor containing sigma values with shape expanded to n_dim: (B, 1, 1)
@@ -665,7 +668,7 @@ class TiTok(
         random_drop_mask = (
             torch.rand(batch_size, device=z_quantized.device)
             >= self.null_condition_prob
-        ).float()
+        ).to(dtype=z_quantized.dtype)
         mask_expanded = random_drop_mask.view(batch_size, 1, 1, 1).to(
             z_quantized.device
         )  # [batch_size, 1, 1, 1]
