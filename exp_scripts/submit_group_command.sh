@@ -26,18 +26,18 @@
 # nodes=4
 
 #### python exp_scripts/group_job_dispatcher.py titok_b512_4096_12 32 2e-4 all results_ablation results_ablation exp_scripts/for_long_slurm_all_b512_ablate.sh
-output_root="results_ablation"
-job_name="24N@tokenizer_training@all_b512_ablate+nodes=24@P_p1"
-call_file="exp_scripts/for_long_slurm_all_b512_ablate.sh"
-nodes=24
+# output_root="results_ablation"
+# job_name="24N@tokenizer_training@all_b512_ablate+nodes=24@P_p1"
+# call_file="exp_scripts/for_long_slurm_all_b512_ablate.sh"
+# nodes=24
 
 
 #### CONTINUOUS
-#### python exp_scripts/group_job_dispatcher.py titok_b256_4096_12 128 2e-4 continuous results_ablation results_ablation exp_scripts/for_long_slurm_all_b512_continuous.sh
+#### python exp_scripts/group_job_dispatcher.py titok_b256_4096_12 128 2e-4 continuous results_ablation results_ablation exp_scripts/for_long_slurm_all_b256_continuous.sh
 output_root="results_ablation"
-job_name="24N@tokenizer_training@all_b512_ablate+nodes=24@P_p1"
-call_file="exp_scripts/for_long_slurm_all_b512_continuous.sh"
-nodes=24
+nodes=16
+job_name="${nodes}N@tokenizer_training@all_b256_continuous+nodes=${nodes}@P_p1"
+call_file="exp_scripts/for_long_slurm_all_b256_continuous.sh"
 
 command="sbatch --job-name=${job_name} --output=${output_root}/${job_name}/logs/slurm_%j.out --nodes=${nodes} exp_scripts/long_slurm_group.sh $call_file $output_root "
 echo $command

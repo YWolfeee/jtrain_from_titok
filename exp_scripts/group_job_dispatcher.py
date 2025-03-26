@@ -4,7 +4,6 @@ import sys
 mount_from = "/project/cosmos/haotiany/joint_training/"
 mount_to = "/joint_training"
 container_path = "/project/cosmos/haotiany/docker_images/imaginaire4_v9.2.2.sqsh"
-main_file = "exp_scripts/main_newloss_group_causal.sh"
 
 config_name = sys.argv[1]
 batch_size = sys.argv[2]
@@ -73,6 +72,7 @@ elif method =="baseline":
             f.write(command + "\n")
 
 elif method == "all":
+    main_file = "exp_scripts/main_newloss_group_causal.sh"
     for elbo_mode in ['px', 'titok', 'elastic']:
         for p_mean in [0.5, 0.25,]:
             for anneal in [True, False]:
@@ -86,6 +86,8 @@ elif method == "all":
                     f.write("sleep 0.5\n")
 
 elif method == 'continuous':
+    main_file = "exp_scripts/main_newloss_group_continuous.sh"
+
     for elbo_mode in ['px', 'titok', 'elastic', 'flextok']:
         for anneal in [True, False]:
             for causal in [True, False]:
@@ -93,7 +95,7 @@ elif method == 'continuous':
                 this_weight = ""
 
                 f.write("\n")
-                command = f"srun --nodes=1 --ntasks=1 --cpus-per-task=64 --mem-per-gpu=72G --gpus=8 --exclusive --container-mounts=$mount_from:$mount_to --container-image=$container_path /bin/bash $mount_to/jtrain_from_titok/{main_file} {config_name} {batch_size} {lr} True True 0.5 {anneal} {causal} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} > {output_root}/logs/{job_name}.log 2>&1 &"
+                command = f"srun --nodes=1 --ntasks=1 --cpus-per-task=64 --mem-per-gpu=72G --gpus=8 --exclusive --container-mounts=$mount_from:$mount_to --container-image=$container_path /bin/bash $mount_to/jtrain_from_titok/{main_file} {config_name} {batch_size} {lr} True True 0.5 {anneal} {causal} {output_root} {job_name} {elbo_mode} {wandb_projects} {this_weight} >> {output_root}/logs/{job_name}.log 2>&1 &"
                 f.write(command + "\n")
                 f.write("sleep 0.5\n")
         
