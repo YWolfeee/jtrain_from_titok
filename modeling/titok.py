@@ -594,8 +594,9 @@ class TiTok(
     
     def _get_sigmas(
         self, 
-        timesteps: torch.Tensor, 
+        indices: torch.Tensor, 
         n_dim: int = 4, 
+        device = None,
         dtype: torch.dtype = TORCH_DTYPE
     ) -> torch.Tensor:
         """Retrieves sigma values corresponding to given timesteps from the scheduler.
@@ -611,11 +612,8 @@ class TiTok(
         Returns:
             A tensor containing sigma values with shape expanded to n_dim: (B, 1, 1)
         """
-        sigmas = self.scheduler.sigmas.to(device=timesteps.device, dtype=dtype)
-        schedule_timesteps = self.scheduler.timesteps.to(timesteps.device)
-        timesteps = timesteps.to(timesteps.device)
-        step_indices = [(schedule_timesteps == t).nonzero().item() for t in timesteps]
-        sigma = sigmas[step_indices].flatten()
+        sigmas = self.scheduler.sigmas.to(device=device, dtype=dtype)
+        sigma = sigmas[indices].flatten()
         while len(sigma.shape) < n_dim:
             sigma = sigma.unsqueeze(-1)
         return sigma
@@ -686,8 +684,10 @@ class TiTok(
             device=z_quantized.device
         )
         indices = (u * self.scheduler.config.num_train_timesteps).long()
+        # Handle the edge case where u = 1
+        indices = torch.clamp(indices, min=0, max=self.scheduler.config.num_train_timesteps - 1)
         timesteps = self.scheduler.timesteps[indices].to(device=z_quantized.device)
-        sigmas = self._get_sigmas(timesteps, n_dim=vae_latent.ndim, dtype=z_quantized.dtype)
+        sigmas = self._get_sigmas(indices, n_dim=vae_latent.ndim, device=z_quantized.device, dtype=z_quantized.dtype)
         noise = torch.randn_like(vae_latent)
         noisy_vae_latent = (1.0 - sigmas) * vae_latent + sigmas * noise
 

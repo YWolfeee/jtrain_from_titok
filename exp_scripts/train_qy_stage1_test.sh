@@ -2,7 +2,7 @@
 #PBS -S /bin/bash
 #PBS -l select=1:ncpus=8:mem=90gb:ngpus=2:host=cvml05
 
-config_name='titok_b128_4096_12'
+config_name='titok_b256_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
 rate_weight=0

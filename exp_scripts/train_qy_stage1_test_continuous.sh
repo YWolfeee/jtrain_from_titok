@@ -1,12 +1,12 @@
 #PBS -N zexp_flextok_test
 #PBS -S /bin/bash
-#PBS -l select=1:ncpus=8:mem=90gb:ngpus=2:host=cvml11
+#PBS -l select=1:ncpus=48:mem=360gb:ngpus=8:host=cvml11
 
-config_name='titok_b128_4096_12'
+config_name='titok_b256_4096_12'
 model_type="transformer"
 logit_head_type="gaussian_1"
 rate_weight=0
-mode=elastic
+mode=px
 if [ "$mode" = "px" ]; then
     port=9999
 elif [ "$mode" = "elastic" ]; then
@@ -14,7 +14,7 @@ elif [ "$mode" = "elastic" ]; then
 else
     port=9990
 fi
-tag="try_stage1_flow_repa_correct_${mode}"
+tag="b256_flow_repa_debug_px_${mode}"
 
 nvidia-smi
 cd ~/jtrain_from_titok
@@ -26,13 +26,13 @@ export PYTHONPATH=$(pwd)
 export WANDB_INIT_TIMEOUT=300
 
 accelerate launch \
-    --num_machines=1 --num_processes=2 --machine_rank=0 \
+    --num_machines=1 --num_processes=8 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=${port} --same_network \
     scripts/train_titok.py config=configs/training/stage1/${config_name}.yaml \
     experiment.project="temp" \
     experiment.name="${tag}" \
     experiment.output_dir="temp/${tag}" \
-    experiment.eval_every=1000 \
+    experiment.eval_every=5000 \
     \
     model.vq_model.from_continuous=True \
     \
