@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=multi_titok
 #SBATCH --account=dir_cosmos_base
-#SBATCH --partition=interactive
+#SBATCH --partition=pool0_datahall_a
 #SBATCH --nodes=2               # <-- 多节点
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=8
@@ -31,7 +31,7 @@ echo "SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST"
 srun --export=ALL -l \
      --container-image=$me/docker_images/imaginaire4_v9.2.2.sqsh \
      --container-mounts=$me/joint_training/:/joint_training \
-     bash /joint_training/jtrain_from_titok/exp_scripts/connect.sh $SLURM_NNODES $WORLD_SIZE $MASTER_ADDR $MASTER_PORT
+     bash /joint_training/jtrain_from_titok/exp_scripts/short_slurm_multinode.sh $SLURM_NNODES $WORLD_SIZE $MASTER_ADDR $MASTER_PORT
     #  bash /joint_training/jtrain_from_titok/temp.sh 0.1
 
 exit_status=$?

@@ -2,9 +2,8 @@
 
 SLURM_NNODES=$1
 WORLD_SIZE=$2
-SLURM_NODEID=$3
-MASTER_ADDR=$4
-MASTER_PORT=$5
+MASTER_ADDR=$3
+MASTER_PORT=$4
 
 cd /joint_training/jtrain_from_titok
 pwd
@@ -16,13 +15,16 @@ echo "WORLD_SIZE=$WORLD_SIZE"
 echo "SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST"
 echo "SLURM_NODEID=$SLURM_NODEID"
 
-ping -c $MASTER_ADDR:$MASTER_PORT
+# ping -c $MASTER_ADDR:$MASTER_PORT
+pip install torchinfo diffusers
 
 config_name='titok_s128_4096_12'
 model_type='transformer'
 tag='multinode-test'
 ngpus=8
 export PYTHONPATH=$(pwd)
+export HF_HOME=$(pwd)/huggingface
+
 
 # 这里是accelerate多机的启动方式
 accelerate launch \
