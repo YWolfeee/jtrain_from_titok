@@ -10,6 +10,14 @@ cd /joint_training/jtrain_from_titok
 pwd
 source ~/.bashrc  # 如果需要的话
 
+echo "MASTER_ADDR=$MASTER_ADDR"
+echo "MASTER_PORT=$MASTER_PORT"
+echo "WORLD_SIZE=$WORLD_SIZE"
+echo "SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST"
+echo "SLURM_NODEID=$SLURM_NODEID"
+
+ping -c $MASTER_ADDR:$MASTER_PORT
+
 config_name='titok_s128_4096_12'
 model_type='transformer'
 tag='multinode-test'

@@ -2,11 +2,11 @@
 
 #SBATCH --job-name=multi_titok
 #SBATCH --account=dir_cosmos_base
-#SBATCH --partition=pool0_datahall_a
-#SBATCH --nodes=4               # <-- 多节点
+#SBATCH --partition=interactive
+#SBATCH --nodes=2               # <-- 多节点
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=8
-#SBATCH --time=4:00:00
+#SBATCH --time=1:00:00
 
 # 这里根据自己需要决定是不是要指定 output 和 error 文件
 #SBATCH --output=logs/%j.out
@@ -31,7 +31,7 @@ echo "SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST"
 srun --export=ALL -l \
      --container-image=$me/docker_images/imaginaire4_v9.2.2.sqsh \
      --container-mounts=$me/joint_training/:/joint_training \
-     bash /joint_training/jtrain_from_titok/exp_scripts/short_slurm_multinode.sh $SLURM_NNODES $WORLD_SIZE $SLURM_NODEID $MASTER_ADDR $MASTER_PORT
+     bash /joint_training/jtrain_from_titok/exp_scripts/connect.sh $SLURM_NNODES $WORLD_SIZE $MASTER_ADDR $MASTER_PORT
     #  bash /joint_training/jtrain_from_titok/temp.sh 0.1
 
 exit_status=$?
