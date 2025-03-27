@@ -33,8 +33,8 @@
 
 
 #### CONTINUOUS
-#### python exp_scripts/group_job_dispatcher.py titok_b256_4096_12 128 2e-4 continuous results_ablation results_ablation exp_scripts/for_long_slurm_all_b256_continuous.sh
-output_root="results_ablation"
+#### python exp_scripts/group_job_dispatcher.py titok_b256_4096_12 128 2e-4 continuous results_continuous results_continuous exp_scripts/for_long_slurm_all_b256_continuous.sh
+output_root="results_continuous"
 nodes=16
 job_name="${nodes}N@tokenizer_training@all_b256_continuous+nodes=${nodes}@P_p1"
 call_file="exp_scripts/for_long_slurm_all_b256_continuous.sh"
