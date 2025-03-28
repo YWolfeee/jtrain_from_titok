@@ -576,7 +576,7 @@ def train_one_epoch(config, logger, accelerator,
 
                 # only generate images for the first process
                 if accelerator.is_main_process:
-                    MAX_SAVE = 32
+                    MAX_SAVE = 8
                     batch = next(iter(eval_dataloader))
                     func = lambda dic: {k: v[:MAX_SAVE] if not isinstance(v, dict) else func(v) for k, v in dic.items()}
 
