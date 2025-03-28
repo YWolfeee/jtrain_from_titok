@@ -176,7 +176,7 @@ class TiTok(
                 self.config.model.vq_model, "num_inference_steps", 25
             )
             self.guidance_scale = getattr(
-                self.config.model.vq_model, "guidance_scale", 1.8
+                self.config.model.vq_model, "guidance_scale", 5.0
             )
             self.scheduler = FlowMatchEulerDiscreteScheduler(
                 num_train_timesteps=1000,
@@ -323,6 +323,9 @@ class TiTok(
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def set_guidance_scale(self, guidance_scale: float):
+        self.guidance_scale = guidance_scale
+    
     def set_max_mask_rate(self, global_step: int, max_train_steps: int):
         """Set maximum mask rate.
 
@@ -725,20 +728,29 @@ class TiTok(
         for t in self.scheduler.timesteps:
             timestep = t.expand(batch_size)
 
-            # TODO: Cat and Chunk to reduce inference time
-            # CFG to predict conditional noise prediction and unconditional noise prediction
-            cond_pred, _ = self.latent_decoder(
-                z_quantized, latents, timestep, key_padding_mask=key_padding_mask
+            # Concatenate conditional and unconditional inputs to process in a single forward pass
+            combined_condition = torch.cat([z_quantized, null_condition_expanded], dim=0)
+            combined_latents = torch.cat([latents, latents], dim=0)
+            combined_timestep = torch.cat([timestep, timestep], dim=0)
+            
+            # Create combined padding mask if needed
+            combined_key_padding_mask = None
+            if key_padding_mask is not None:
+                combined_key_padding_mask = torch.cat([key_padding_mask, key_padding_mask], dim=0)
+            
+            # Single forward pass for both conditional and unconditional predictions
+            combined_pred, _ = self.latent_decoder(
+                combined_condition, 
+                combined_latents, 
+                combined_timestep, 
+                key_padding_mask=combined_key_padding_mask
             )
-            uncond_pred, _ = self.latent_decoder(
-                null_condition_expanded,
-                latents,
-                timestep,
-                key_padding_mask=key_padding_mask,
-            )
-            final_pred = uncond_pred + self.guidance_scale * (
-                cond_pred - uncond_pred
-            )
+            
+            # Split the predictions back into conditional and unconditional
+            cond_pred, uncond_pred = torch.chunk(combined_pred, 2, dim=0)
+            
+            # Apply classifier-free guidance
+            final_pred = uncond_pred + self.guidance_scale * (cond_pred - uncond_pred)
 
             # Update latents with scheduler step
             latents = self.scheduler.step(

@@ -1126,57 +1126,64 @@ def reconstruct_images(model, original_images, dino_input, vae_results, fnames, 
     local_model = accelerator.unwrap_model(model)
     local_model.eval()
     
-    reconstructed_images_list = []
-    # QY: Eval with different decode_mask_rate
-    mask_rate_list = [i / 16 for i in range(17)]
-    for decode_mask_rate_val in mask_rate_list:
-        with torch.autocast("cuda", dtype=dtype, enabled=accelerator.mixed_precision != "no"):
+    if local_model.from_continuous:
+        guidance_scales = [1.0, 1.8, 3.0, 5.0]
+    else:
+        guidance_scales = [1.0]
+    
+    for guidance_scale in guidance_scales:
+        local_model.set_guidance_scale(guidance_scale)
+        reconstructed_images_list = []
+        # QY: Eval with different decode_mask_rate
+        mask_rate_list = [i / 16 for i in range(17)]
+        for decode_mask_rate_val in mask_rate_list:
+            with torch.autocast("cuda", dtype=dtype, enabled=accelerator.mixed_precision != "no"):
+                if local_model.from_continuous:
+                    reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results, to_pixel=True)
+                    reconstructed_images = (reconstructed_images * 0.5 + 0.5).clamp(0, 1) # [-1-ep, 1+ep] -> [0, 1]
+                else:
+                    reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
+                    if pretrained_tokenizer is not None:
+                        reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
+                    reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
+            reconstructed_images_list.append(reconstructed_images)
+
+        vis_dict = {}
+        if local_model.use_policy:
             if local_model.from_continuous:
-                reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results, to_pixel=True)
+                reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, vae_results=vae_results, to_pixel=True)
                 reconstructed_images = (reconstructed_images * 0.5 + 0.5).clamp(0, 1) # [-1-ep, 1+ep] -> [0, 1]
             else:
-                reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, fixed_mask_rate_val=decode_mask_rate_val, use_fixed_mask_rate=True, vae_results=vae_results)
+                reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, vae_results=vae_results)
                 if pretrained_tokenizer is not None:
                     reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
                 reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
-        reconstructed_images_list.append(reconstructed_images)
-
-    vis_dict = {}
-    if local_model.use_policy:
-        if local_model.from_continuous:
-            reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, vae_results=vae_results, to_pixel=True)
-            reconstructed_images = (reconstructed_images * 0.5 + 0.5).clamp(0, 1) # [-1-ep, 1+ep] -> [0, 1]
+            reconstructed_images_list.append(reconstructed_images)
+            policy_mask_rate = extra_results_dict["mask_rate_value"]
+            vis_dict["policy_mask_rate"] = policy_mask_rate
+        
+        images_for_saving, images_for_logging = make_viz_from_samples(
+            original_images,
+            reconstructed_images_list,
+            vis_dict=vis_dict
+        )
+        # Log images.
+        if config.training.enable_wandb:
+            accelerator.get_tracker("wandb").log_images(
+                {f"Train Reconstruction/cfg_{guidance_scale}": images_for_saving},
+                step=global_step
+            )
         else:
-            reconstructed_images, extra_results_dict = local_model(original_images, dino_input=dino_input, vae_results=vae_results)
-            if pretrained_tokenizer is not None:
-                reconstructed_images = pretrained_tokenizer.decode(reconstructed_images.argmax(1))
-            reconstructed_images = torch.clamp(reconstructed_images, 0.0, 1.0)
-        reconstructed_images_list.append(reconstructed_images)
-        policy_mask_rate = extra_results_dict["mask_rate_value"]
-        vis_dict["policy_mask_rate"] = policy_mask_rate
-    
-    images_for_saving, images_for_logging = make_viz_from_samples(
-        original_images,
-        reconstructed_images_list,
-        vis_dict=vis_dict
-    )
-    # Log images.
-    if config.training.enable_wandb:
-        accelerator.get_tracker("wandb").log_images(
-            {f"Train Reconstruction": images_for_saving},
-            step=global_step
-        )
-    else:
-        accelerator.get_tracker("tensorboard").log_images(
-            {"Train Reconstruction": images_for_logging}, step=global_step
-        )
-    # Log locally.
-    root = Path(output_dir) / "train_images"
-    os.makedirs(root, exist_ok=True)
-    for i,img in enumerate(images_for_saving):
-        filename = f"{global_step:08}_s-{i:03}-{fnames[i]}.png"
-        path = os.path.join(root, filename)
-        img.save(path)
+            accelerator.get_tracker("tensorboard").log_images(
+                {"Train Reconstruction": images_for_logging}, step=global_step
+            )
+        # Log locally.
+        root = Path(output_dir) / "train_images"
+        os.makedirs(root, exist_ok=True)
+        for i,img in enumerate(images_for_saving):
+            filename = f"{global_step:08}_s-{i:03}-{fnames[i]}-cfg{guidance_scale}.png"
+            path = os.path.join(root, filename)
+            img.save(path)
 
     model.train()
 
